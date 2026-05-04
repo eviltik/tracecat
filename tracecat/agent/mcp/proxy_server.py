@@ -182,14 +182,17 @@ async def create_proxy_mcp_server(
 
         if parsed:
             # User MCP tool: mcp__{server_name}__{tool_name}
-            server_name, original_tool_name = parsed
+            user_mcp_server_name, original_tool_name = parsed
             handler = _make_tool_handler(
                 "execute_user_mcp_tool",
-                {"server_name": server_name, "tool_name": original_tool_name},
+                {
+                    "server_name": user_mcp_server_name,
+                    "tool_name": original_tool_name,
+                },
                 auth_token,
                 {
                     "tool_type": "user_mcp",
-                    "server_name": server_name,
+                    "server_name": user_mcp_server_name,
                     "tool_name": original_tool_name,
                 },
             )

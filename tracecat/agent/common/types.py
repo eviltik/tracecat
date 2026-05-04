@@ -176,6 +176,7 @@ class SandboxSubagentConfig(BaseModel):
     prompt: str
     config: SandboxAgentConfig
     mcp_auth_token: str
+    model_route: str | None = None
     max_turns: int | None = None
     allowed_actions: dict[str, MCPToolDefinition] | None = None
 
@@ -184,7 +185,6 @@ def sandbox_requires_internet_access(
     config: SandboxAgentConfig,
     subagents: Iterable[SandboxSubagentConfig],
 ) -> bool:
-    """Return whether the sandbox process needs network access."""
-    return config.enable_internet_access or any(
-        subagent.config.enable_internet_access for subagent in subagents
-    )
+    """Return whether the shared sandbox process needs root network access."""
+    del subagents
+    return config.enable_internet_access

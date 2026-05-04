@@ -573,10 +573,16 @@ class AgentPresetService(BaseWorkspaceService):
                 )
             aliases.add(alias)
 
-            version = await self.resolve_agent_preset_version(
-                slug=ref.preset,
-                preset_version=ref.preset_version,
-            )
+            preset_version_id = getattr(ref, "preset_version_id", None)
+            if preset_version_id is not None:
+                version = await self.resolve_agent_preset_version(
+                    preset_version_id=preset_version_id,
+                )
+            else:
+                version = await self.resolve_agent_preset_version(
+                    slug=ref.preset,
+                    preset_version=ref.preset_version,
+                )
             if version.preset_id == parent_preset_id or ref.preset == parent_slug:
                 raise TracecatValidationError(
                     "Agent presets cannot reference themselves"

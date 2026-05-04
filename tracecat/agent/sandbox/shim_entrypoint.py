@@ -24,6 +24,7 @@ MCP_SOCKET_ENV_VAR = "TRACECAT__AGENT_MCP_SOCKET_PATH"
 DEFAULT_LLM_SOCKET_PATH = "/var/run/tracecat/llm.sock"
 DEFAULT_MCP_SOCKET_PATH = "/var/run/tracecat/mcp.sock"
 LLM_BRIDGE_HOST = "127.0.0.1"
+MCP_BRIDGE_PATH = "/mcp"
 MAX_BODY_SIZE = 10 * 1024 * 1024
 
 
@@ -234,12 +235,24 @@ async def run_sandboxed_claude_shim() -> None:
         mcp_bridge_port = await mcp_bridge.start()
         LOGGER.info("MCP bridge started for shim on port %s", mcp_bridge_port)
 
-        child_env = {**os.environ, **init_payload["env"]}
+        command = _rewrite_localhost_bridge_port_in_command(
+            init_payload["command"],
+            requested_port=init_payload["mcp_bridge_port"],
+            actual_port=mcp_bridge_port,
+        )
+        child_env = {
+            **os.environ,
+            **_rewrite_localhost_bridge_port_in_env(
+                init_payload["env"],
+                requested_port=init_payload["mcp_bridge_port"],
+                actual_port=mcp_bridge_port,
+            ),
+        }
         child_env["TRACECAT__LLM_BRIDGE_PORT"] = str(bridge_port)
         child_env["TRACECAT__MCP_BRIDGE_PORT"] = str(mcp_bridge_port)
         child_env["ANTHROPIC_BASE_URL"] = f"http://127.0.0.1:{bridge_port}"
         process = await asyncio.create_subprocess_exec(
-            *init_payload["command"],
+            *command,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -307,14 +320,60 @@ async def _read_init_payload(init_path: Path) -> ClaudeShimInitPayload:
         raise ValueError("Shim payload env must be a dict[str, str]")
     if not isinstance(cwd, str):
         raise ValueError("Shim payload cwd must be a string")
-    if not isinstance(mcp_bridge_port, int) or mcp_bridge_port <= 0:
-        raise ValueError("Shim payload mcp_bridge_port must be a positive integer")
+    if not isinstance(mcp_bridge_port, int) or mcp_bridge_port < 0:
+        raise ValueError("Shim payload mcp_bridge_port must be a non-negative integer")
 
     return {
         "command": command,
         "env": env,
         "cwd": cwd,
         "mcp_bridge_port": mcp_bridge_port,
+    }
+
+
+def _rewrite_localhost_bridge_port_text(
+    value: str,
+    *,
+    requested_port: int,
+    actual_port: int,
+) -> str:
+    """Rewrite MCP bridge URLs after an atomic port-0 bind."""
+    if requested_port == actual_port:
+        return value
+    requested_url = f"http://127.0.0.1:{requested_port}{MCP_BRIDGE_PATH}"
+    actual_url = f"http://127.0.0.1:{actual_port}{MCP_BRIDGE_PATH}"
+    return value.replace(requested_url, actual_url)
+
+
+def _rewrite_localhost_bridge_port_in_command(
+    command: list[str],
+    *,
+    requested_port: int,
+    actual_port: int,
+) -> list[str]:
+    return [
+        _rewrite_localhost_bridge_port_text(
+            item,
+            requested_port=requested_port,
+            actual_port=actual_port,
+        )
+        for item in command
+    ]
+
+
+def _rewrite_localhost_bridge_port_in_env(
+    env: dict[str, str],
+    *,
+    requested_port: int,
+    actual_port: int,
+) -> dict[str, str]:
+    return {
+        key: _rewrite_localhost_bridge_port_text(
+            item,
+            requested_port=requested_port,
+            actual_port=actual_port,
+        )
+        for key, item in env.items()
     }
 
 

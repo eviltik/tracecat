@@ -134,9 +134,9 @@ async def create_session_activity(input: CreateSessionInput) -> CreateSessionRes
                         tools=input.tools,
                         agent_preset_id=input.agent_preset_id,
                         agent_preset_version_id=input.agent_preset_version_id,
-                        agents_binding=input.agents_binding,
                         harness_type=input.harness_type,
-                    )
+                    ),
+                    agents_binding=input.agents_binding,
                 )
 
             # Reconcile agents_binding for pre-existing sessions: backfill if

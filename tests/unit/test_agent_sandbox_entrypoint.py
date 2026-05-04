@@ -18,6 +18,8 @@ from tracecat.agent.sandbox.shim_entrypoint import (
     _resolve_init_payload_path,
     _resolve_llm_socket_path,
     _resolve_mcp_socket_path,
+    _rewrite_localhost_bridge_port_in_command,
+    _rewrite_localhost_bridge_port_in_env,
     _wait_for_process_with_stdin,
 )
 from tracecat.agent.sandbox.shim_entrypoint import (
@@ -119,6 +121,63 @@ async def test_read_shim_init_payload_validates_shape(tmp_path: Path) -> None:
         "env": {"HOME": "/work/claude-home"},
         "cwd": "/work/claude-project",
         "mcp_bridge_port": 4101,
+    }
+
+
+@pytest.mark.anyio
+async def test_read_shim_init_payload_accepts_port_zero(tmp_path: Path) -> None:
+    init_path = tmp_path / "shim-init.json"
+    init_path.write_bytes(
+        orjson.dumps(
+            {
+                "command": ["claude", "--print"],
+                "env": {"HOME": "/work/claude-home"},
+                "cwd": "/work/claude-project",
+                "mcp_bridge_port": 0,
+            }
+        )
+    )
+
+    payload = await _read_shim_init_payload(init_path)
+
+    assert payload["mcp_bridge_port"] == 0
+
+
+def test_rewrite_localhost_bridge_port_in_command() -> None:
+    command = [
+        "claude",
+        "--mcp-config",
+        '{"url":"http://127.0.0.1:0/mcp","other":"http://127.0.0.1:0/health"}',
+    ]
+
+    rewritten = _rewrite_localhost_bridge_port_in_command(
+        command,
+        requested_port=0,
+        actual_port=54321,
+    )
+
+    assert rewritten == [
+        "claude",
+        "--mcp-config",
+        '{"url":"http://127.0.0.1:54321/mcp","other":"http://127.0.0.1:0/health"}',
+    ]
+
+
+def test_rewrite_localhost_bridge_port_in_env() -> None:
+    env = {
+        "TRACECAT_MCP_URL": "http://127.0.0.1:0/mcp",
+        "OTHER_URL": "http://127.0.0.1:0/health",
+    }
+
+    rewritten = _rewrite_localhost_bridge_port_in_env(
+        env,
+        requested_port=0,
+        actual_port=54321,
+    )
+
+    assert rewritten == {
+        "TRACECAT_MCP_URL": "http://127.0.0.1:54321/mcp",
+        "OTHER_URL": "http://127.0.0.1:0/health",
     }
 
 

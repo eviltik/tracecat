@@ -152,6 +152,67 @@ async def test_execute_action_tool_surfaces_builtin_registry_sync_pending(
 
 
 @pytest.mark.anyio
+async def test_build_token_scoped_tools_does_not_advertise_internal_from_actions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_fetch_tool_definitions(
+        action_names: list[str],
+    ) -> dict[str, MCPToolDefinition]:
+        assert action_names == []
+        return {}
+
+    monkeypatch.setattr(
+        trusted_server,
+        "fetch_tool_definitions",
+        fake_fetch_tool_definitions,
+    )
+
+    claims = _build_claims(
+        allowed_actions=["internal.builder.get_session"],
+        allowed_internal_tools=[],
+    )
+    tools = await trusted_server.build_token_scoped_tools(claims)
+
+    assert tools == []
+
+
+@pytest.mark.anyio
+async def test_token_scoped_fastmcp_get_tool_reuses_token_catalog(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    claims = _build_claims(allowed_actions=["core.cases.list_cases"])
+    tool = trusted_server._build_scoped_tool(
+        tool_name="core__cases__list_cases",
+        description="List cases",
+        parameters_json_schema={"type": "object"},
+        claims=claims,
+    )
+    build_token_scoped_tools = AsyncMock(return_value=[tool])
+
+    monkeypatch.setattr(
+        trusted_server,
+        "get_http_headers",
+        lambda include: {"authorization": "Bearer token"},
+    )
+    monkeypatch.setattr(
+        trusted_server,
+        "_claims_from_authorization_header",
+        lambda authorization: claims,
+    )
+    monkeypatch.setattr(
+        trusted_server,
+        "build_token_scoped_tools",
+        build_token_scoped_tools,
+    )
+
+    mcp = trusted_server.TokenScopedFastMCP("test")
+
+    assert await mcp.get_tool("core__cases__list_cases") is tool
+    assert await mcp.get_tool("core__cases__list_cases") is tool
+    build_token_scoped_tools.assert_awaited_once_with(claims)
+
+
+@pytest.mark.anyio
 async def test_build_token_scoped_tools_filters_root_catalog(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -280,6 +341,60 @@ async def test_call_token_scoped_tool_routes_registry_and_strips_metadata(
         {"limit": 10},
         claims,
         tool_call_id="toolu_123",
+    )
+
+
+@pytest.mark.anyio
+async def test_call_token_scoped_tool_routes_subagent_registry_name_to_registry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    execute_registry = AsyncMock(return_value='{"ok": true}')
+    monkeypatch.setattr(
+        trusted_server,
+        "_execute_registry_action",
+        execute_registry,
+    )
+
+    claims = _build_claims(allowed_actions=["core.cases.list_cases"])
+    result = await trusted_server.call_token_scoped_tool(
+        "mcp__tracecat-registry-analyst__core__cases__list_cases",
+        {"limit": 10},
+        claims,
+    )
+
+    assert result == '{"ok": true}'
+    execute_registry.assert_awaited_once_with(
+        "core.cases.list_cases",
+        {"limit": 10},
+        claims,
+        tool_call_id=None,
+    )
+
+
+@pytest.mark.anyio
+async def test_call_token_scoped_tool_routes_subagent_registry_user_mcp_to_user_mcp(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    execute_user_mcp = AsyncMock(return_value='"ISSUE-1"')
+    monkeypatch.setattr(
+        trusted_server,
+        "_execute_user_mcp",
+        execute_user_mcp,
+    )
+
+    claims = _build_claims(allowed_actions=["mcp__Jira__getIssue"])
+    result = await trusted_server.call_token_scoped_tool(
+        "mcp__tracecat-registry-analyst__mcp__Jira__getIssue",
+        {"issueKey": "ISSUE-1"},
+        claims,
+    )
+
+    assert result == '"ISSUE-1"'
+    execute_user_mcp.assert_awaited_once_with(
+        "Jira",
+        "getIssue",
+        {"issueKey": "ISSUE-1"},
+        claims,
     )
 
 

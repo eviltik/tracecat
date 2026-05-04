@@ -329,7 +329,7 @@ class ClaudeAgentRuntime:
     def _stdio_mcp_server_config(
         config: MCPStdioServerConfig,
     ) -> McpStdioServerConfig:
-        server_config: McpStdioServerConfig = {
+        server_config: dict[str, Any] = {
             "type": "stdio",
             "command": config["command"],
         }
@@ -337,7 +337,9 @@ class ClaudeAgentRuntime:
             server_config["args"] = args
         if env := config.get("env"):
             server_config["env"] = env
-        return server_config
+        if (timeout := config.get("timeout")) is not None:
+            server_config["timeout"] = timeout
+        return cast(McpStdioServerConfig, server_config)
 
     @classmethod
     def _stdio_mcp_servers(
@@ -943,16 +945,22 @@ class ClaudeAgentRuntime:
             )
 
             disallowed_tools = list(CHILD_AGENT_DISALLOWED_TOOLS)
-            if not subagent.config.enable_internet_access:
+            if not (
+                payload.config.enable_internet_access
+                and subagent.config.enable_internet_access
+            ):
                 disallowed_tools.extend(INTERNET_TOOLS)
 
             definitions[subagent.alias] = AgentDefinition(
                 description=subagent.description,
                 prompt=subagent.prompt,
-                model=get_litellm_route_model(
-                    model_provider=subagent.config.model_provider,
-                    model_name=subagent.config.model_name,
-                    passthrough=subagent.config.passthrough,
+                model=(
+                    subagent.model_route
+                    or get_litellm_route_model(
+                        model_provider=subagent.config.model_provider,
+                        model_name=subagent.config.model_name,
+                        passthrough=subagent.config.passthrough,
+                    )
                 ),
                 tools=self._allowed_tools_for_mcp_scope(
                     registry_server_name=registry_server_name,
@@ -1018,10 +1026,12 @@ class ClaudeAgentRuntime:
                 for subagent in payload.subagents
             },
         }
+        root_internet_access = payload.config.enable_internet_access
         self._scope_internet_access = {
             "root": payload.config.enable_internet_access,
             **{
-                subagent.alias: subagent.config.enable_internet_access
+                subagent.alias: root_internet_access
+                and subagent.config.enable_internet_access
                 for subagent in payload.subagents
             },
         }
@@ -1081,8 +1091,9 @@ class ClaudeAgentRuntime:
 
             # Build disallowed tools list based on environment and config
             # - Always blocked: interactive/planning tools (DISALLOWED_TOOLS)
-            # - Internet tools: blocked only when no scope can use them. The
-            #   hook below enforces root/subagent-specific access.
+            # - Internet tools: blocked unless the root sandbox can use them.
+            #   Child definitions and the hook enforce subagent-specific access
+            #   when root internet access is enabled.
             # Filesystem tools (Bash, Read, Write, etc.) are always allowed:
             # - nsjail mode: sandbox provides OS-level isolation
             # - direct mode: SandboxSettings + stable cwd scopes file access

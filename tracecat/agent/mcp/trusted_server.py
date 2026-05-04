@@ -14,6 +14,7 @@ Docker container with nsjail installed (e.g., the executor image).
 from __future__ import annotations
 
 import json
+from collections import OrderedDict
 from collections.abc import Sequence
 from typing import Any
 
@@ -42,6 +43,8 @@ from tracecat.agent.mcp.metadata import (
 )
 from tracecat.agent.mcp.user_client import UserMCPClient
 from tracecat.agent.mcp.utils import (
+    LEGACY_REGISTRY_MCP_SERVER_NAME,
+    REGISTRY_MCP_SERVER_NAME,
     action_name_to_mcp_tool_name,
     fetch_tool_definitions,
     mcp_tool_name_to_action_name,
@@ -59,6 +62,8 @@ from tracecat.exceptions import (
 from tracecat.logger import logger
 from tracecat.registry.lock.service import RegistryLockService
 
+_TOKEN_TOOL_CACHE_MAX_SIZE = 256
+
 
 class TracecatScopedTool(Tool):
     """A concrete token-scoped tool exposed by the trusted MCP server."""
@@ -74,9 +79,28 @@ class TracecatScopedTool(Tool):
 class TokenScopedFastMCP(FastMCP[None]):
     """FastMCP server whose visible tools are derived from the caller token."""
 
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._tool_cache: OrderedDict[str, list[Tool]] = OrderedDict()
+
+    async def _tools_from_request(self) -> list[Tool]:
+        authorization = _authorization_header_from_request()
+        if authorization is None:
+            raise ToolError("Authentication failed")
+        claims = _claims_from_authorization_header(authorization)
+        if authorization in self._tool_cache:
+            self._tool_cache.move_to_end(authorization)
+            return self._tool_cache[authorization]
+
+        tools = await build_token_scoped_tools(claims)
+        self._tool_cache[authorization] = tools
+        if len(self._tool_cache) > _TOKEN_TOOL_CACHE_MAX_SIZE:
+            self._tool_cache.popitem(last=False)
+        return tools
+
     async def list_tools(self, *, run_middleware: bool = True) -> Sequence[Tool]:
         del run_middleware
-        return await build_token_scoped_tools(_claims_from_request())
+        return await self._tools_from_request()
 
     async def get_tool(
         self,
@@ -84,8 +108,7 @@ class TokenScopedFastMCP(FastMCP[None]):
         version: VersionSpec | None = None,
     ) -> Tool | None:
         del version
-        claims = _claims_from_request()
-        tools = await build_token_scoped_tools(claims)
+        tools = await self._tools_from_request()
         return next((tool for tool in tools if tool.name == name), None)
 
 
@@ -135,10 +158,9 @@ def _claims_from_authorization_header(authorization: str | None) -> MCPTokenClai
     return _claims_from_token(token)
 
 
-def _claims_from_request() -> MCPTokenClaims:
-    """Extract and verify MCP token claims from the active HTTP request."""
+def _authorization_header_from_request() -> str | None:
     headers = get_http_headers(include={"authorization"})
-    return _claims_from_authorization_header(headers.get("authorization"))
+    return headers.get("authorization")
 
 
 def _registry_action_names(claims: MCPTokenClaims) -> list[str]:
@@ -152,10 +174,30 @@ def _registry_action_names(claims: MCPTokenClaims) -> list[str]:
 
 def _internal_tool_names(claims: MCPTokenClaims) -> list[str]:
     names: list[str] = []
-    for name in [*claims.allowed_internal_tools, *claims.allowed_actions]:
+    for name in claims.allowed_internal_tools:
         if name.startswith("internal.") and name not in names:
             names.append(name)
     return names
+
+
+def _is_tracecat_registry_server_name(server_name: str) -> bool:
+    return (
+        server_name in {REGISTRY_MCP_SERVER_NAME, LEGACY_REGISTRY_MCP_SERVER_NAME}
+        or server_name.startswith(f"{REGISTRY_MCP_SERVER_NAME}-")
+        or server_name.startswith(f"{LEGACY_REGISTRY_MCP_SERVER_NAME}_")
+    )
+
+
+def _strip_tracecat_registry_server_prefix(tool_name: str) -> str:
+    if tool_name.startswith("mcp__"):
+        parts = tool_name.split("__", 2)
+        if len(parts) == 3 and _is_tracecat_registry_server_name(parts[1]):
+            return parts[2]
+    if tool_name.startswith("mcp."):
+        parts = tool_name.split(".", 2)
+        if len(parts) == 3 and _is_tracecat_registry_server_name(parts[1]):
+            return parts[2]
+    return tool_name
 
 
 def _user_mcp_tool_names(claims: MCPTokenClaims) -> set[str]:
@@ -440,7 +482,8 @@ async def call_token_scoped_tool(
 ) -> str:
     """Route one token-scoped concrete MCP tool call."""
     forwarded_args = dict(args)
-    if parsed := UserMCPClient.parse_user_mcp_tool_name(tool_name):
+    routed_tool_name = _strip_tracecat_registry_server_prefix(tool_name)
+    if parsed := UserMCPClient.parse_user_mcp_tool_name(routed_tool_name):
         server_name, original_tool_name = parsed
         return await _execute_user_mcp(
             server_name,
@@ -449,7 +492,8 @@ async def call_token_scoped_tool(
             claims,
         )
 
-    action_name = mcp_tool_name_to_action_name(tool_name)
+    action_name = mcp_tool_name_to_action_name(routed_tool_name)
+
     if action_name.startswith("internal."):
         return await _execute_internal(action_name, forwarded_args, claims)
 

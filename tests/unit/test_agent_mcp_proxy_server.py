@@ -98,6 +98,34 @@ async def test_create_proxy_mcp_server_only_augments_registry_tool_schema(
 
 
 @pytest.mark.anyio
+async def test_create_proxy_mcp_server_preserves_configured_server_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_tool(name: str, description: str, schema: dict[str, object]):
+        def decorator(handler):
+            return handler
+
+        return decorator
+
+    monkeypatch.setattr(proxy_server, "tool", fake_tool)
+    monkeypatch.setattr(proxy_server, "create_sdk_mcp_server", lambda **kwargs: kwargs)
+
+    server_config = await proxy_server.create_proxy_mcp_server(
+        allowed_actions={
+            "mcp__Jira__getIssue": MCPToolDefinition(
+                name="mcp__Jira__getIssue",
+                description="Get issue",
+                parameters_json_schema={"type": "object"},
+            )
+        },
+        auth_token="token",
+        server_name="tracecat-registry-analyst",
+    )
+
+    assert server_config["name"] == "tracecat-registry-analyst"
+
+
+@pytest.mark.anyio
 async def test_registry_proxy_handler_strips_metadata_and_forwards_tool_call_id(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

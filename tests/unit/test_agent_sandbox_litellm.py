@@ -90,6 +90,8 @@ class _FakeClaudeOptions:
     env: dict[str, str]
     enable_file_checkpointing: bool = False
     stderr: Callable[[str], None] | None = None
+    mcp_servers: object = None
+    agents: object = None
 
 
 def _make_executor_input(*, enable_internet_access: bool) -> AgentExecutorInput:
@@ -1551,7 +1553,7 @@ async def test_executor_starts_llm_socket_proxy_for_isolated_passthrough_runs(
 
 
 @pytest.mark.anyio
-async def test_executor_enables_runtime_internet_when_subagent_requires_it(
+async def test_executor_keeps_runtime_isolated_when_only_subagent_requires_internet(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -1584,7 +1586,7 @@ async def test_executor_enables_runtime_internet_when_subagent_requires_it(
     assert result.success is True
     assert len(fake_broker.requests) == 1
     assert fake_broker.requests[0].init_payload.config.enable_internet_access is False
-    assert fake_broker.requests[0].enable_internet_access is True
+    assert fake_broker.requests[0].enable_internet_access is False
 
 
 @pytest.mark.anyio

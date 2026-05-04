@@ -270,18 +270,12 @@ def test_transport_uses_fixed_mcp_bridge_port_for_jailed_runtime(
     )
 
 
-def test_transport_uses_dynamic_mcp_bridge_port_for_direct_runtime(
-    monkeypatch: pytest.MonkeyPatch,
+def test_transport_uses_port_zero_mcp_bridge_for_direct_runtime(
     tmp_path: Path,
 ) -> None:
-    monkeypatch.setattr(
-        SandboxedCLITransport,
-        "_available_localhost_port",
-        staticmethod(lambda: 54321),
-    )
     transport = _make_transport(tmp_path, use_jailed_paths=False)
 
-    assert transport._mcp_bridge_port_for_runtime() == 54321
+    assert transport._mcp_bridge_port_for_runtime() == 0
 
 
 def test_transport_rewrites_trusted_mcp_bridge_urls_for_selected_port(

@@ -139,11 +139,15 @@ async def resolve_agents_config_activity(
             aliases.add(alias)
 
             preset_version_id = getattr(ref, "preset_version_id", None)
-            version = await service.resolve_agent_preset_version(
-                slug=ref.preset,
-                preset_version_id=preset_version_id,
-                preset_version=ref.preset_version,
-            )
+            if preset_version_id is not None:
+                version = await service.resolve_agent_preset_version(
+                    preset_version_id=preset_version_id,
+                )
+            else:
+                version = await service.resolve_agent_preset_version(
+                    slug=ref.preset,
+                    preset_version=ref.preset_version,
+                )
             if (
                 args.parent_preset_id is not None
                 and version.preset_id == args.parent_preset_id

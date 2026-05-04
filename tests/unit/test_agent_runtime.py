@@ -485,6 +485,7 @@ class TestClaudeAgentRuntimeRun:
                             "command": "npx",
                             "args": ["-y", "@modelcontextprotocol/server-filesystem"],
                             "env": {"ROOT": "/tmp"},
+                            "timeout": 15,
                         }
                     ]
                 }
@@ -515,6 +516,7 @@ class TestClaudeAgentRuntimeRun:
                 "command": "npx",
                 "args": ["-y", "@modelcontextprotocol/server-filesystem"],
                 "env": {"ROOT": "/tmp"},
+                "timeout": 15,
             },
         }
         assert set(options.allowed_tools) == {
@@ -816,7 +818,7 @@ class TestClaudeAgentRuntimeRun:
         }
 
     @pytest.mark.anyio
-    async def test_subagent_internet_access_keeps_sdk_tools_available_with_root_policy_deny(
+    async def test_root_internet_policy_disables_subagent_internet_tools(
         self,
         mock_socket_writer: MagicMock,
         mock_claude_sdk_client: MagicMock,
@@ -870,10 +872,10 @@ class TestClaudeAgentRuntimeRun:
         assert captured_options
         options = captured_options[0]
         internet_tools = set(runtime_module.INTERNET_TOOLS)
-        assert internet_tools.isdisjoint(options.disallowed_tools)
+        assert internet_tools.issubset(options.disallowed_tools)
         assert options.agents is not None
         child_disallowed_tools = options.agents["web"].disallowedTools or []
-        assert internet_tools.isdisjoint(child_disallowed_tools)
+        assert internet_tools.issubset(child_disallowed_tools)
 
         root_result = await runtime._pre_tool_use_hook(
             input_data=make_hook_input(
@@ -899,10 +901,9 @@ class TestClaudeAgentRuntimeRun:
             tool_use_id="call-child-web-search",
             context=make_hook_context(),
         )
-        assert get_hook_output(child_result) == {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "allow",
-        }
+        child_hook_output = get_hook_output(child_result)
+        assert child_hook_output.get("permissionDecision") == "deny"
+        assert "web" in (child_hook_output.get("permissionDecisionReason") or "")
 
     @pytest.mark.parametrize(
         ("provider", "model_name", "passthrough", "expected"),
@@ -944,6 +945,33 @@ class TestClaudeAgentRuntimeRun:
 
         assert definitions is not None
         assert definitions["analyst"].model == expected
+
+    def test_subagent_definitions_prefer_scoped_model_route(
+        self,
+        mock_socket_writer: MagicMock,
+        sample_init_payload: RuntimeInitPayload,
+    ) -> None:
+        child = SandboxSubagentConfig(
+            alias="analyst",
+            description="Use for enrichment analysis.",
+            prompt="Analyze enrichment data.",
+            config=sample_init_payload.config,
+            mcp_auth_token="child-mcp-token",
+            model_route="openai/gpt-4o-mini::tracecat-subagent::analyst",
+        )
+        payload = replace(sample_init_payload, subagents=[child])
+        runtime = ClaudeAgentRuntime(
+            mock_socket_writer,
+            transport_factory=lambda _: MagicMock(),
+        )
+
+        definitions = runtime._build_agent_definitions(payload=payload)
+
+        assert definitions is not None
+        assert (
+            definitions["analyst"].model
+            == "openai/gpt-4o-mini::tracecat-subagent::analyst"
+        )
 
     @pytest.mark.parametrize(
         "disable_nsjail",
@@ -1179,10 +1207,6 @@ class TestClaudeAgentRuntimeRun:
             patch(
                 "tracecat.agent.runtime.claude_code.runtime.ClaudeSDKClient",
                 return_value=mock_claude_sdk_client,
-            ),
-            patch(
-                "tracecat.agent.runtime.claude_code.runtime.create_proxy_mcp_server",
-                AsyncMock(return_value={}),
             ),
         ):
             runtime = ClaudeAgentRuntime(

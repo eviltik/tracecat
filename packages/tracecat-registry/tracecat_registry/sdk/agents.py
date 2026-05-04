@@ -47,22 +47,22 @@ class MCPServerConfig(TypedDict):
     """Optional: Transport type. Defaults to 'http'."""
 
 
-class SubAgentConfig(TypedDict, total=False):
+class SubAgentConfig(TypedDict):
     """Preset-backed subagent exposed to an agent run."""
 
     preset: str
     """Required: slug of the preset to expose as a subagent."""
 
-    preset_version: int | None
+    preset_version: NotRequired[int | None]
     """Optional preset version to pin."""
 
-    name: str | None
+    name: NotRequired[str | None]
     """Optional Agent tool alias for this subagent."""
 
-    description: str | None
+    description: NotRequired[str | None]
     """Optional task-selection description for this subagent."""
 
-    max_turns: int | None
+    max_turns: NotRequired[int | None]
     """Optional per-invocation turn limit."""
 
 

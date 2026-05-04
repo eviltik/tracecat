@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import uuid
 
-from tracecat.agent.session.schemas import AgentSessionCreate
+from tracecat.agent.session.schemas import AgentSessionCreate, AgentSessionUpdate
 from tracecat.agent.session.types import AgentSessionEntity
-from tracecat.agent.subagents import ResolvedAgentsConfig
 
 
 def test_agent_session_create_ignores_channel_context_payload() -> None:
@@ -25,7 +24,7 @@ def test_agent_session_create_ignores_channel_context_payload() -> None:
     assert "channel_context" not in dumped
 
 
-def test_agent_session_create_types_agents_binding() -> None:
+def test_agent_session_create_ignores_agents_binding_payload() -> None:
     session = AgentSessionCreate.model_validate(
         {
             "title": "New session",
@@ -35,27 +34,16 @@ def test_agent_session_create_types_agents_binding() -> None:
         }
     )
 
-    assert isinstance(session.agents_binding, ResolvedAgentsConfig)
-    assert session.agents_binding.enabled is True
-    assert session.model_dump(mode="json")["agents_binding"] == {
-        "enabled": True,
-        "subagents": [],
-    }
+    assert "agents_binding" not in session.model_dump(mode="json")
 
 
-def test_agent_session_create_normalizes_empty_agents_binding_to_disabled() -> None:
-    session = AgentSessionCreate.model_validate(
+def test_agent_session_update_ignores_agents_binding_payload() -> None:
+    session_update = AgentSessionUpdate.model_validate(
         {
-            "title": "New session",
-            "entity_type": AgentSessionEntity.AGENT_PRESET,
-            "entity_id": str(uuid.uuid4()),
-            "agents_binding": {},
+            "title": "Updated session",
+            "agents_binding": {"enabled": True, "subagents": []},
         }
     )
 
-    assert isinstance(session.agents_binding, ResolvedAgentsConfig)
-    assert session.agents_binding.enabled is False
-    assert session.model_dump(mode="json")["agents_binding"] == {
-        "enabled": False,
-        "subagents": [],
-    }
+    assert session_update.title == "Updated session"
+    assert "agents_binding" not in session_update.model_dump(mode="json")

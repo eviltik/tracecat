@@ -149,6 +149,11 @@ def _llm_route_for_config(
     )
 
 
+def _subagent_litellm_route_model(alias: str, route_model: str) -> str:
+    """Return a unique incoming LiteLLM model key for one subagent scope."""
+    return f"{route_model}::tracecat-subagent::{alias}"
+
+
 class AgentWorkflowArgs(BaseModel):
     """Arguments for starting an agent workflow."""
 
@@ -464,7 +469,11 @@ class DurableAgentWorkflow:
                 child_cfg,
                 use_workspace_credentials=use_workspace_credentials,
             )
-            llm_routes[route_model] = route_claim
+            scoped_route_model = _subagent_litellm_route_model(
+                subagent.alias,
+                route_model,
+            )
+            llm_routes[scoped_route_model] = route_claim
 
             mcp_auth_token = mint_mcp_token(
                 workspace_id=self.workspace_id,
@@ -485,6 +494,7 @@ class DurableAgentWorkflow:
                     max_turns=subagent.max_turns,
                     config=SandboxAgentConfig.from_agent_config(child_cfg),
                     mcp_auth_token=mcp_auth_token,
+                    model_route=scoped_route_model,
                     allowed_actions=child_build_result.tool_definitions,
                 )
             )
@@ -667,16 +677,6 @@ class DurableAgentWorkflow:
             allowed_internal_tools=allowed_internal_tools,
             internal_tool_context=internal_tool_context,
         )
-        root_route_model, _ = _llm_route_for_config(
-            cfg,
-            use_workspace_credentials=False,
-        )
-        llm_routes = {
-            route_model: route_claim
-            for route_model, route_claim in subagent_llm_routes.items()
-            if route_model != root_route_model
-        }
-
         llm_gateway_auth_token = mint_llm_token(
             workspace_id=self.workspace_id,
             organization_id=self.organization_id,
@@ -687,7 +687,7 @@ class DurableAgentWorkflow:
             base_url=cfg.base_url,
             model_settings=cfg.model_settings,
             use_workspace_credentials=False,
-            routes=llm_routes,
+            routes=subagent_llm_routes,
         )
 
         # Prepare executor input

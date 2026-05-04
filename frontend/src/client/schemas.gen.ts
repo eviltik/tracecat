@@ -3046,17 +3046,6 @@ export const $AgentSessionCreate = {
       title: "Agent Preset Version Id",
       description: "Pinned preset version used for this session (if any)",
     },
-    agents_binding: {
-      anyOf: [
-        {
-          $ref: "#/components/schemas/ResolvedAgentsConfig",
-        },
-        {
-          type: "null",
-        },
-      ],
-      description: "Normalized subagent bindings for this session",
-    },
     harness_type: {
       $ref: "#/components/schemas/HarnessType",
       description: "Agent harness type",
@@ -3673,17 +3662,6 @@ export const $AgentSessionUpdate = {
       ],
       title: "Agent Preset Version Id",
       description: "Pinned preset version to use for this session",
-    },
-    agents_binding: {
-      anyOf: [
-        {
-          $ref: "#/components/schemas/ResolvedAgentsConfig",
-        },
-        {
-          type: "null",
-        },
-      ],
-      description: "Normalized subagent bindings for this session",
     },
     harness_type: {
       anyOf: [

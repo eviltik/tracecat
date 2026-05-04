@@ -53,10 +53,6 @@ class AgentSessionCreate(BaseModel):
         default=None,
         description="Pinned preset version used for this session (if any)",
     )
-    agents_binding: ResolvedAgentsConfig | None = Field(
-        default=None,
-        description="Normalized subagent bindings for this session",
-    )
     # Harness fields
     harness_type: HarnessType = Field(
         default=HarnessType.CLAUDE_CODE, description="Agent harness type"
@@ -78,10 +74,6 @@ class AgentSessionUpdate(BaseModel):
     agent_preset_version_id: uuid.UUID | None = Field(
         default=None,
         description="Pinned preset version to use for this session",
-    )
-    agents_binding: ResolvedAgentsConfig | None = Field(
-        default=None,
-        description="Normalized subagent bindings for this session",
     )
     harness_type: HarnessType | None = Field(
         default=None, description="Agent harness type"

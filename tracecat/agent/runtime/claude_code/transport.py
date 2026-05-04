@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import socket
 from collections.abc import AsyncIterator
 from dataclasses import replace
 from pathlib import Path
@@ -280,19 +279,13 @@ class SandboxedCLITransport(Transport):
         """Return the MCP bridge port for this runtime process.
 
         Jailed runtimes have a private loopback namespace, so the configured fixed
-        port is safe there. Direct mode shares the host namespace and needs an
-        available port to avoid concurrent local runs colliding.
+        port is safe there. Direct mode shares the host namespace, so the shim
+        binds port 0 atomically and rewrites the child runtime command after it
+        knows the actual port.
         """
         if self._use_jailed_paths:
             return TRACECAT__AGENT_MCP_BRIDGE_PORT
-        return self._available_localhost_port()
-
-    @staticmethod
-    def _available_localhost_port() -> int:
-        """Ask the OS for an available localhost port."""
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            sock.bind(("127.0.0.1", 0))
-            return int(sock.getsockname()[1])
+        return 0
 
     @staticmethod
     def _trusted_mcp_bridge_url(port: int) -> str:

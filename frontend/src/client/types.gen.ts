@@ -708,10 +708,6 @@ export type AgentSessionCreate = {
    */
   agent_preset_version_id?: string | null
   /**
-   * Normalized subagent bindings for this session
-   */
-  agents_binding?: ResolvedAgentsConfig | null
-  /**
    * Agent harness type
    */
   harness_type?: HarnessType
@@ -848,10 +844,6 @@ export type AgentSessionUpdate = {
    * Pinned preset version to use for this session
    */
   agent_preset_version_id?: string | null
-  /**
-   * Normalized subagent bindings for this session
-   */
-  agents_binding?: ResolvedAgentsConfig | null
   /**
    * Agent harness type
    */
