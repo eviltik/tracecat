@@ -18,6 +18,7 @@ from tracecat.agent.executor.activity import (
     AgentExecutorInput,
     AgentExecutorResult,
 )
+from tracecat.agent.preset.activities import ResolveMCPIntegrationsActivityInput
 from tracecat.agent.session.activities import (
     CreateSessionInput,
     CreateSessionResult,
@@ -30,6 +31,7 @@ from tracecat.agent.worker import (
 from tracecat.agent.worker import (
     new_sandbox_runner as new_agent_sandbox_runner,
 )
+from tracecat.agent.workflow_schemas import MCPHttpServerConfigPayload
 from tracecat.auth.types import Role
 from tracecat.dsl.common import RETRY_POLICIES, DSLEntrypoint, DSLInput, DSLRunArgs
 from tracecat.dsl.schemas import ActionStatement
@@ -109,12 +111,15 @@ def create_mock_load_session_activity() -> Callable[..., Any]:
     return mock_load_session_activity
 
 
-def create_mock_build_tool_definitions_activity() -> Callable[..., Any]:
+def create_mock_build_tool_definitions_activity(
+    captured_inputs: list[BuildToolDefsArgs] | None = None,
+) -> Callable[..., Any]:
     @activity.defn(name="build_tool_definitions")
     async def mock_build_tool_definitions(
         args: BuildToolDefsArgs,
     ) -> BuildToolDefsResult:
-        del args
+        if captured_inputs is not None:
+            captured_inputs.append(args)
         return BuildToolDefsResult(
             tool_definitions={},
             registry_lock=RegistryLock(
@@ -126,6 +131,26 @@ def create_mock_build_tool_definitions_activity() -> Callable[..., Any]:
         )
 
     return mock_build_tool_definitions
+
+
+def create_mock_resolve_mcp_integrations_activity(
+    captured_inputs: list[ResolveMCPIntegrationsActivityInput] | None = None,
+) -> Callable[..., Any]:
+    @activity.defn(name="resolve_mcp_integrations_activity")
+    async def mock_resolve_mcp_integrations(
+        args: ResolveMCPIntegrationsActivityInput,
+    ) -> list[MCPHttpServerConfigPayload]:
+        if captured_inputs is not None:
+            captured_inputs.append(args)
+        return [
+            MCPHttpServerConfigPayload(
+                type="http",
+                name="HTTP MCP",
+                url="https://api.example.com/mcp",
+            )
+        ]
+
+    return mock_resolve_mcp_integrations
 
 
 def create_mock_run_agent_activity(*, output: str) -> Callable[..., Any]:
@@ -229,6 +254,89 @@ class TestDSLAgentWiring:
 
         data = await to_data(result)
         assert data["output"] == "dsl-agent-wired"
+
+    @pytest.mark.anyio
+    @pytest.mark.integration
+    async def test_dsl_workflow_resolves_ai_agent_mcp_integrations(
+        self,
+        test_role: Role,
+        temporal_client: Client,
+        test_worker_factory: Callable[..., Worker],
+        agent_worker_factory: Callable[..., Worker],
+    ) -> None:
+        captured_resolver_inputs: list[ResolveMCPIntegrationsActivityInput] = []
+        captured_tool_inputs: list[BuildToolDefsArgs] = []
+        integration_id = "11111111-1111-1111-1111-111111111111"
+
+        agent_activities = list(get_agent_worker_activities())
+        for replacement in (
+            create_mock_create_session_activity(),
+            create_mock_load_session_activity(),
+            create_mock_build_tool_definitions_activity(captured_tool_inputs),
+        ):
+            agent_activities = _replace_activity(agent_activities, replacement)
+        agent_activities.append(
+            create_mock_run_agent_activity(output="dsl-agent-mcp-wired")
+        )
+
+        dsl_activities = list(get_dsl_worker_activities())
+        dsl_activities = _replace_activity(
+            dsl_activities,
+            create_mock_resolve_mcp_integrations_activity(captured_resolver_inputs),
+        )
+
+        dsl = DSLInput(
+            title="DSL agent MCP wiring",
+            description="Verify ai.agent resolves saved MCP integrations",
+            entrypoint=DSLEntrypoint(ref="agent"),
+            actions=[
+                ActionStatement(
+                    ref="agent",
+                    action="ai.agent",
+                    args={
+                        "user_prompt": "Investigate this alert",
+                        "model_name": "gpt-4o-mini",
+                        "model_provider": "openai",
+                        "mcp_integrations": [integration_id],
+                    },
+                )
+            ],
+            returns="${{ ACTIONS.agent.result }}",
+        )
+        wf_id = WorkflowUUID.new_uuid4()
+
+        async with test_worker_factory(
+            temporal_client,
+            activities=dsl_activities,
+        ):
+            async with agent_worker_factory(
+                temporal_client,
+                task_queue=config.TRACECAT__AGENT_QUEUE,
+                activities=agent_activities,
+            ):
+                result = await temporal_client.execute_workflow(
+                    DSLWorkflow.run,
+                    DSLRunArgs(
+                        dsl=dsl,
+                        role=test_role,
+                        wf_id=wf_id,
+                    ),
+                    id=generate_exec_id(wf_id),
+                    task_queue=config.TEMPORAL__CLUSTER_QUEUE,
+                    retry_policy=RETRY_POLICIES["workflow:fail_fast"],
+                    execution_timeout=timedelta(seconds=60),
+                )
+
+        data = await to_data(result)
+        assert data["output"] == "dsl-agent-mcp-wired"
+        assert captured_resolver_inputs[0].mcp_integrations == [integration_id]
+        assert captured_tool_inputs[0].mcp_servers == [
+            {
+                "type": "http",
+                "name": "HTTP MCP",
+                "url": "https://api.example.com/mcp",
+            }
+        ]
 
     @pytest.mark.anyio
     @pytest.mark.integration

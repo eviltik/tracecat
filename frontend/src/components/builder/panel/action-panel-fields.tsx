@@ -69,7 +69,11 @@ import {
   useAgentPresetVersions,
 } from "@/hooks/use-agent-presets"
 import { isExpression } from "@/lib/expressions"
-import { useBuilderRegistryActions, useWorkspaceAgentModels } from "@/lib/hooks"
+import {
+  useBuilderRegistryActions,
+  useListMcpIntegrations,
+  useWorkspaceAgentModels,
+} from "@/lib/hooks"
 import { getType } from "@/lib/jsonschema"
 import {
   type ExpressionComponent,
@@ -337,6 +341,25 @@ export function PolymorphicField({
             )}
           />
         )
+      case "mcp-integration":
+        return (
+          <Controller
+            name={fieldName}
+            control={methods.control}
+            render={({ field }) => (
+              <FormItem>
+                <FormLabelComponent
+                  label={label}
+                  description={formattedDescription}
+                  deprecated={deprecated}
+                  type={type}
+                />
+                <FormMessage className="whitespace-pre-line" />
+                <MCPIntegrationField field={field} />
+              </FormItem>
+            )}
+          />
+        )
     }
   }
 
@@ -594,6 +617,8 @@ function ComponentContent({
           component={component}
         />
       )
+    case "mcp-integration":
+      return <MCPIntegrationField field={field} />
     // Expression, workflow alias, and other fields fallback to expression
     case "workflow-alias":
     case "expression":
@@ -770,6 +795,49 @@ function SingleActionTypeField({
   )
 }
 
+export function MCPIntegrationField({
+  field,
+}: {
+  field: ControllerRenderProps<FieldValues>
+}) {
+  const workspaceId = useWorkspaceId()
+  const { mcpIntegrations, mcpIntegrationsIsLoading, mcpIntegrationsError } =
+    useListMcpIntegrations(workspaceId)
+
+  const suggestions = useMemo<Suggestion[]>(() => {
+    return (mcpIntegrations ?? [])
+      .map((integration) => ({
+        id: integration.id,
+        label: integration.name,
+        value: integration.id,
+        description: integration.description ?? integration.slug,
+        group: integration.server_type,
+        icon: <WorkflowIcon className="mx-1 size-3 text-muted-foreground" />,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+  }, [mcpIntegrations])
+
+  const value = Array.isArray(field.value) ? field.value : []
+  const placeholder = !workspaceId
+    ? "Select a workspace to load MCP integrations"
+    : mcpIntegrationsIsLoading
+      ? "Loading MCP integrations..."
+      : mcpIntegrationsError
+        ? "Failed to load MCP integrations"
+        : "Select MCP integrations"
+
+  return (
+    <MultiTagCommandInput
+      value={value}
+      onChange={field.onChange}
+      suggestions={suggestions}
+      searchKeys={["label", "value", "description", "group"]}
+      placeholder={placeholder}
+      disabled={!workspaceId}
+    />
+  )
+}
+
 function MultipleActionTypeField({
   field,
   onChange,
@@ -867,6 +935,7 @@ const COMPONENT_LABELS: Record<TracecatComponentId, string> = {
   "workflow-alias": "Workflow Alias",
   "agent-preset": "Agent Preset",
   "agent-model": "Agent Model",
+  "mcp-integration": "MCP Integration",
 }
 
 const COMPONENT_ICONS: Record<TracecatComponentId, LucideIcon> = {
@@ -884,6 +953,7 @@ const COMPONENT_ICONS: Record<TracecatComponentId, LucideIcon> = {
   "workflow-alias": WorkflowIcon,
   "agent-preset": WorkflowIcon,
   "agent-model": WorkflowIcon,
+  "mcp-integration": WorkflowIcon,
 }
 
 function AgentPresetSelect({

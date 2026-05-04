@@ -81,6 +81,22 @@ def _mcp_server_from_payload(server: MCPServerConfigPayload) -> MCPServerConfig:
             return http_server
 
 
+def mcp_servers_to_payload(
+    servers: list[MCPServerConfig] | None,
+) -> list[MCPServerConfigPayload] | None:
+    if not servers:
+        return None
+    return [_mcp_server_to_payload(server) for server in servers]
+
+
+def mcp_servers_from_payload(
+    servers: list[MCPServerConfigPayload] | None,
+) -> list[MCPServerConfig] | None:
+    if not servers:
+        return None
+    return [_mcp_server_from_payload(server) for server in servers]
+
+
 def _resolved_skill_to_payload(skill: ResolvedSkillRef) -> ResolvedSkillRefPayload:
     """Convert a resolved skill ref into a workflow-safe payload."""
 
@@ -117,11 +133,7 @@ def agent_config_to_payload(config: AgentConfig) -> AgentConfigPayload:
         namespaces=config.namespaces,
         tool_approvals=config.tool_approvals,
         model_settings=config.model_settings,
-        mcp_servers=(
-            [_mcp_server_to_payload(server) for server in config.mcp_servers]
-            if config.mcp_servers
-            else None
-        ),
+        mcp_servers=mcp_servers_to_payload(config.mcp_servers),
         retries=config.retries,
         enable_thinking=config.enable_thinking,
         enable_internet_access=config.enable_internet_access,
@@ -147,11 +159,7 @@ def agent_config_from_payload(payload: AgentConfigPayload) -> AgentConfig:
         namespaces=payload.namespaces,
         tool_approvals=payload.tool_approvals,
         model_settings=payload.model_settings,
-        mcp_servers=(
-            [_mcp_server_from_payload(server) for server in payload.mcp_servers]
-            if payload.mcp_servers
-            else None
-        ),
+        mcp_servers=mcp_servers_from_payload(payload.mcp_servers),
         retries=payload.retries,
         enable_thinking=payload.enable_thinking,
         enable_internet_access=payload.enable_internet_access,

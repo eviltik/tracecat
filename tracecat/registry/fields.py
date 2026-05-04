@@ -26,6 +26,7 @@ class ComponentID(StrEnum):
     YAML = "yaml"
     ACTION_TYPE = "action-type"
     WORKFLOW_ALIAS = "workflow-alias"
+    MCP_INTEGRATION = "mcp-integration"
 
 
 @dataclass(slots=True)
@@ -68,6 +69,14 @@ class AgentModel(Component):
     """Render field as org-scoped model picker in UI"""
 
     component_id: Literal[ComponentID.AGENT_MODEL] = ComponentID.AGENT_MODEL
+
+
+@dataclass(slots=True)
+class MCPIntegration(Component):
+    """Render field as saved MCP integration picker in UI"""
+
+    component_id: Literal[ComponentID.MCP_INTEGRATION] = ComponentID.MCP_INTEGRATION
+    multiple: bool = True
 
 
 @dataclass(slots=True)
@@ -300,6 +309,7 @@ class EditorComponent(RootModel):
         | ActionType
         | WorkflowAlias
         | AgentPreset
-        | AgentModel,
+        | AgentModel
+        | MCPIntegration,
         Field(discriminator="component_id"),
     ]

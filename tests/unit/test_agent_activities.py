@@ -101,6 +101,23 @@ class TestSessionActivities:
 
 class TestBuildToolDefinitionsActivity:
     @pytest.mark.anyio
+    async def test_mcp_servers_require_entitlement_context(self) -> None:
+        args = BuildToolDefsArgs(
+            role=Role(type="service", service_id="tracecat-api"),
+            tool_filters=ToolFilters(actions=[]),
+            mcp_servers=[
+                {
+                    "type": "http",
+                    "name": "example",
+                    "url": "https://example.com/mcp",
+                }
+            ],
+        )
+
+        with pytest.raises(ValueError, match="organization_id"):
+            await AgentActivities().build_tool_definitions(args)
+
+    @pytest.mark.anyio
     async def test_maps_tool_definition_errors_to_application_error(
         self,
         monkeypatch: pytest.MonkeyPatch,

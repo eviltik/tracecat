@@ -844,7 +844,7 @@ class AgentPresetService(BaseWorkspaceService):
 
         if not mcp_servers:
             raise TracecatValidationError(
-                "No matching MCP integrations found for this preset in the workspace"
+                "No matching MCP integrations found for this workspace"
             )
 
         return mcp_servers

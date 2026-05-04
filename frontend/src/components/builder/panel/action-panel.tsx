@@ -278,11 +278,15 @@ function shouldShowOptionalFieldByDefault(
   fieldDefn: unknown
 ): boolean {
   return (
-    fieldName === "model" &&
     isTracecatJsonSchema(fieldDefn) &&
-    getTracecatComponents(fieldDefn).some(
-      (component) => component.component_id === "agent-model"
-    )
+    ((fieldName === "model" &&
+      getTracecatComponents(fieldDefn).some(
+        (component) => component.component_id === "agent-model"
+      )) ||
+      (fieldName === "mcp_integrations" &&
+        getTracecatComponents(fieldDefn).some(
+          (component) => component.component_id === "mcp-integration"
+        )))
   )
 }
 

@@ -33,6 +33,12 @@ class AgentModel:
 
 
 @dataclass(slots=True)
+class MCPIntegration:
+    component_id: Literal["mcp-integration"] = "mcp-integration"
+    multiple: bool = True
+
+
+@dataclass(slots=True)
 class ActionType:
     component_id: Literal["action-type"] = "action-type"
     multiple: bool = False
@@ -59,6 +65,7 @@ __all__ = [
     "AgentModel",
     "AgentPreset",
     "Code",
+    "MCPIntegration",
     "ModelSelection",
     "TextArea",
 ]

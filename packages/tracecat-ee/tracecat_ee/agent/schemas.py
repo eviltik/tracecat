@@ -65,6 +65,7 @@ class AgentActionArgs(BaseModel):
     enable_thinking: bool = True
     base_url: str | None = None
     tool_approvals: dict[str, bool] | None = None
+    mcp_integrations: list[str] | None = None
 
 
 class PresetAgentActionArgs(BaseModel):

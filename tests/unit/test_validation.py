@@ -965,8 +965,21 @@ async def test_validate_dsl_with_optional_oauth_credentials(
 
 @pytest.mark.integration
 @pytest.mark.anyio
-async def test_agent_tool_approvals_requires_entitlement(
-    test_role, db_session_with_repo, monkeypatch
+@pytest.mark.parametrize(
+    ("gated_args", "expected_field"),
+    [
+        (
+            {"tool_approvals": {"tools.slack.post_message": True}},
+            "tool_approvals",
+        ),
+        (
+            {"mcp_integrations": ["11111111-1111-1111-1111-111111111111"]},
+            "mcp_integrations",
+        ),
+    ],
+)
+async def test_agent_addon_fields_require_entitlement(
+    test_role, db_session_with_repo, monkeypatch, gated_args, expected_field
 ):
     session, db_repo_id = db_session_with_repo
 
@@ -1009,7 +1022,7 @@ async def test_agent_tool_approvals_requires_entitlement(
                         "model_provider": "openai",
                     },
                     "actions": ["tools.slack.post_message"],
-                    "tool_approvals": {"tools.slack.post_message": True},
+                    **gated_args,
                 },
             )
         ],
@@ -1023,18 +1036,24 @@ async def test_agent_tool_approvals_requires_entitlement(
     assert len(action_errors) == 1
     root = action_errors[0].root
     assert isinstance(root, ActionValidationResult)
-    detail = root.detail
-    if detail is None:
-        detail_msgs: set[str] = set()
-    else:
-        detail_msgs = {d.msg for d in detail}
+    detail = root.detail or []
+    detail_msgs = {d.msg for d in detail}
+    detail_locs = {d.loc for d in detail}
     assert any("agent_addons" in msg for msg in detail_msgs)
+    assert ("agent_action", expected_field) in detail_locs
 
 
 @pytest.mark.integration
 @pytest.mark.anyio
-async def test_agent_tool_approvals_passes_with_entitlement(
-    test_role, db_session_with_repo, monkeypatch
+@pytest.mark.parametrize(
+    "gated_args",
+    [
+        {"tool_approvals": {"tools.slack.post_message": True}},
+        {"mcp_integrations": ["11111111-1111-1111-1111-111111111111"]},
+    ],
+)
+async def test_agent_addon_fields_pass_with_entitlement(
+    test_role, db_session_with_repo, monkeypatch, gated_args
 ):
     session, db_repo_id = db_session_with_repo
 
@@ -1076,7 +1095,7 @@ async def test_agent_tool_approvals_passes_with_entitlement(
                         "model_provider": "openai",
                     },
                     "actions": ["tools.slack.post_message"],
-                    "tool_approvals": {"tools.slack.post_message": True},
+                    **gated_args,
                 },
             )
         ],

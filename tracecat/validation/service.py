@@ -392,10 +392,10 @@ async def validate_dsl_actions(
         if result.status == "error" and result.detail:
             details.extend(result.detail)
 
-        # Entitlement gate: tool approvals are an enterprise feature
-        if (
-            act_stmt.action == "ai.agent"
-            and act_stmt.args.get("tool_approvals") is not None
+        # Entitlement gate: advanced agent tool configuration is an add-on feature.
+        if act_stmt.action == "ai.agent" and (
+            act_stmt.args.get("tool_approvals") is not None
+            or act_stmt.args.get("mcp_integrations") is not None
         ):
             if agent_addons_entitled is None:
                 if role.organization_id is None:
@@ -407,16 +407,18 @@ async def validate_dsl_actions(
                     role.organization_id, Entitlement.AGENT_ADDONS
                 )
             if not agent_addons_entitled:
-                details.append(
-                    ValidationDetail(
-                        type="action",
-                        msg=(
-                            "`tool_approvals` requires the 'agent_addons' entitlement. "
-                            "Remove the field or upgrade your plan."
-                        ),
-                        loc=(act_stmt.ref, "tool_approvals"),
-                    )
-                )
+                for field_name in ("tool_approvals", "mcp_integrations"):
+                    if act_stmt.args.get(field_name) is not None:
+                        details.append(
+                            ValidationDetail(
+                                type="action",
+                                msg=(
+                                    f"`{field_name}` requires the 'agent_addons' entitlement. "
+                                    "Remove the field or upgrade your plan."
+                                ),
+                                loc=(act_stmt.ref, field_name),
+                            )
+                        )
         # Validate `run_if`
         if act_stmt.run_if and not is_template_only(act_stmt.run_if):
             details.append(

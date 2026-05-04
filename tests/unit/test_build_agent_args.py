@@ -120,6 +120,29 @@ class TestBuildAgentArgsActivity:
         assert result.user_prompt == "You are a helpful assistant"
 
     @pytest.mark.anyio
+    async def test_preserves_mcp_integrations(self, role: Role):
+        args = {
+            "user_prompt": "Hello",
+            "model_name": "gpt-4o-mini",
+            "model_provider": "openai",
+            "mcp_integrations": [
+                "11111111-1111-1111-1111-111111111111",
+                "22222222-2222-2222-2222-222222222222",
+            ],
+        }
+        input = BuildAgentArgsActivityInput(
+            args=args,
+            operand=_make_context(),
+            role=role,
+            task_environment=None,
+            default_environment="default",
+        )
+
+        result = await DSLActivities.build_agent_args_activity(input)
+
+        assert result.mcp_integrations == args["mcp_integrations"]
+
+    @pytest.mark.anyio
     async def test_no_vars_works(self, role: Role):
         """When no VARS expressions are present, static values pass through."""
         args = {

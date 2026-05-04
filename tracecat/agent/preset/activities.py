@@ -10,10 +10,15 @@ from temporalio.exceptions import ApplicationError
 
 from tracecat.agent.preset.service import AgentPresetService
 from tracecat.agent.service import AgentManagementService
-from tracecat.agent.workflow_config import agent_config_to_payload
-from tracecat.agent.workflow_schemas import AgentConfigPayload
+from tracecat.agent.workflow_config import (
+    agent_config_to_payload,
+    mcp_servers_to_payload,
+)
+from tracecat.agent.workflow_schemas import AgentConfigPayload, MCPServerConfigPayload
 from tracecat.auth.types import Role
 from tracecat.db.models import AgentCatalog
+from tracecat.tiers.entitlements import check_entitlement
+from tracecat.tiers.enums import Entitlement
 
 
 class ResolveAgentPresetConfigActivityInput(BaseModel):
@@ -47,6 +52,11 @@ class AgentPresetVersionRef(BaseModel):
     preset_version_id: uuid.UUID
 
 
+class ResolveMCPIntegrationsActivityInput(BaseModel):
+    role: Role
+    mcp_integrations: list[str]
+
+
 @activity.defn
 async def resolve_agent_preset_config_activity(
     args: ResolveAgentPresetConfigActivityInput,
@@ -74,6 +84,21 @@ async def resolve_agent_preset_version_ref_activity(
             preset_id=version.preset_id,
             preset_version_id=version.id,
         )
+
+
+@activity.defn
+async def resolve_mcp_integrations_activity(
+    args: ResolveMCPIntegrationsActivityInput,
+) -> list[MCPServerConfigPayload] | None:
+    async with AgentPresetService.with_session(role=args.role) as service:
+        await check_entitlement(
+            service.session,
+            args.role,
+            Entitlement.AGENT_ADDONS,
+        )
+        await service.validate_mcp_integrations(args.mcp_integrations)
+        servers = await service.resolve_mcp_integrations(args.mcp_integrations)
+        return mcp_servers_to_payload(servers)
 
 
 class CustomModelProviderConfigResult(BaseModel):

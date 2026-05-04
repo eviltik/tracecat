@@ -3247,6 +3247,7 @@ export type EditorComponent =
   | WorkflowAlias
   | AgentPreset
   | AgentModel
+  | MCPIntegration
 
 export type EditorFunctionRead = {
   name: string
@@ -4309,6 +4310,11 @@ export type MCPHttpServerConfig = {
 }
 
 export type transport = "http" | "sse"
+
+export type MCPIntegration = {
+  component_id?: "mcp-integration"
+  multiple?: boolean
+}
 
 export type MCPIntegrationCreate =
   | MCPHttpIntegrationCreate

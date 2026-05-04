@@ -106,9 +106,9 @@ class AgentActivities:
         # Set role context for services that require organization context
         ctx_role.set(args.role)
 
-        # Runtime guard for approval-gated agent flows. This ensures direct
+        # Runtime guard for add-on-gated agent flows. This ensures direct
         # workflow execution paths still enforce entitlements.
-        if args.tool_approvals:
+        if args.tool_approvals or args.mcp_servers:
             if args.role.organization_id is None:
                 raise ValueError(
                     "Role must have organization_id to validate entitlements"
