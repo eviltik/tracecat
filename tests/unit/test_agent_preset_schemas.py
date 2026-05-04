@@ -107,6 +107,7 @@ def test_agent_preset_read_schema_accepts_legacy_whitespace_model_fields() -> No
     assert payload.model_name == "   "
     assert payload.model_provider == "   "
     assert payload.enable_thinking is True
+    assert payload.warnings == []
 
 
 def test_agent_preset_read_minimal_exposes_approval_boolean_only() -> None:

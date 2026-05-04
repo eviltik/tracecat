@@ -2380,6 +2380,9 @@ function AgentPresetSubagentsPanel({
   onRemoveSubagent: (index: number) => void
 }) {
   const agentsEnabled = form.watch("agentsEnabled")
+  const internetAccessWarning = parentPreset?.warnings?.find(
+    (warning) => warning.code === "subagent_internet_requires_parent"
+  )
   const presetOptions = useMemo(
     () =>
       agentPresets
@@ -2446,6 +2449,16 @@ function AgentPresetSubagentsPanel({
               Add preset
             </Button>
           </div>
+
+          {internetAccessWarning ? (
+            <Alert variant="warning">
+              <AlertCircle className="size-4" />
+              <AlertTitle>Internet access limited</AlertTitle>
+              <AlertDescription>
+                {internetAccessWarning.message}
+              </AlertDescription>
+            </Alert>
+          ) : null}
 
           {!agentsEnabled ? (
             <p className="rounded-md border border-dashed px-3 py-4 text-xs text-muted-foreground">

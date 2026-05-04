@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
@@ -146,6 +146,14 @@ class AgentPresetReadMinimal(Schema):
     updated_at: datetime
 
 
+class AgentPresetWarning(BaseModel):
+    """Non-blocking configuration warning for an agent preset."""
+
+    code: Literal["subagent_internet_requires_parent"]
+    message: str
+    subagent_aliases: list[str] = Field(default_factory=list)
+
+
 def build_agent_preset_read_minimal(preset: Any) -> AgentPresetReadMinimal:
     """Build a minimal preset response without exposing approval rule details."""
     read = AgentPresetReadMinimal.model_validate(preset)
@@ -168,6 +176,7 @@ class AgentPresetRead(AgentPresetExecutionConfig):
     description: str | None = Field(default=None, max_length=1000)
     current_version_id: uuid.UUID | None = None
     skills: list[AgentPresetSkillBindingRead] = Field(default_factory=list)
+    warnings: list[AgentPresetWarning] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 
@@ -224,6 +233,7 @@ class AgentPresetVersionRead(AgentPresetExecutionConfig):
     workspace_id: WorkspaceID
     version: int
     skills: list[AgentPresetSkillBindingRead] = Field(default_factory=list)
+    warnings: list[AgentPresetWarning] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 
