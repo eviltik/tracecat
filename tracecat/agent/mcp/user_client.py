@@ -55,7 +55,11 @@ class UserMCPClient:
         """
         self._configs = {cfg["name"]: cfg for cfg in configs}
 
-    async def discover_tools(self) -> dict[str, MCPToolDefinition]:
+    async def discover_tools(
+        self,
+        *,
+        fail_on_error: bool = False,
+    ) -> dict[str, MCPToolDefinition]:
         """Connect to all configured servers and discover their tools.
 
         Returns:
@@ -74,6 +78,10 @@ class UserMCPClient:
                     server_name=server_name,
                     error_type=type(e).__name__,
                 )
+                if fail_on_error:
+                    raise RuntimeError(
+                        f"Failed to discover tools from user MCP server '{server_name}'"
+                    ) from e
                 # Continue with other servers - don't fail completely
 
         logger.info(
@@ -218,6 +226,8 @@ class UserMCPClient:
 
 async def discover_user_mcp_tools(
     configs: list[MCPHttpServerConfig],
+    *,
+    fail_on_error: bool = False,
 ) -> dict[str, MCPToolDefinition]:
     """Discover tools from all configured user MCP servers.
 
@@ -234,7 +244,7 @@ async def discover_user_mcp_tools(
         return {}
 
     client = UserMCPClient(configs)
-    return await client.discover_tools()
+    return await client.discover_tools(fail_on_error=fail_on_error)
 
 
 async def call_user_mcp_tool(

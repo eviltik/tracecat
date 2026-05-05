@@ -179,6 +179,77 @@ class TestBuildToolDefinitionsActivity:
         assert app_error.details[0] == {"origin": "tracecat_registry"}
 
     @pytest.mark.anyio
+    async def test_strict_mcp_discovery_failure_fails_scope_compilation(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from tracecat.agent.mcp import user_client
+
+        discover_fail_flags: list[bool] = []
+
+        async def mock_build_agent_tools(**_kwargs: Any) -> BuildToolsResult:
+            return BuildToolsResult(tools=[], collected_secrets=set())
+
+        async def mock_discover_user_mcp_tools(
+            _configs: list[dict[str, Any]],
+            *,
+            fail_on_error: bool = False,
+        ) -> dict[str, Any]:
+            discover_fail_flags.append(fail_on_error)
+            raise RuntimeError("server unavailable")
+
+        class _LockService:
+            async def resolve_lock_with_bindings(
+                self,
+                actions: set[str],
+            ) -> RegistryLock:
+                return RegistryLock(origins={}, actions={})
+
+        class _AsyncContext:
+            async def __aenter__(self) -> _LockService:
+                return _LockService()
+
+            async def __aexit__(
+                self, exc_type: object, exc: object, tb: object
+            ) -> None:
+                return None
+
+        monkeypatch.setattr(
+            agent_activities, "build_agent_tools", mock_build_agent_tools
+        )
+        monkeypatch.setattr(
+            user_client,
+            "discover_user_mcp_tools",
+            mock_discover_user_mcp_tools,
+        )
+        monkeypatch.setattr(
+            RegistryLockService,
+            "with_session",
+            lambda: _AsyncContext(),
+        )
+
+        args = BuildToolDefsArgs(
+            role=Role(type="service", service_id="tracecat-api"),
+            tool_filters=ToolFilters(actions=[]),
+            mcp_servers=[
+                {
+                    "type": "http",
+                    "name": "broken",
+                    "url": "https://broken.example/mcp",
+                }
+            ],
+            fail_on_mcp_discovery_error=True,
+        )
+
+        with pytest.raises(ApplicationError) as exc_info:
+            await AgentActivities().build_tool_definitions(args)
+
+        assert discover_fail_flags == [True]
+        assert exc_info.value.message == (
+            "Failed to discover configured MCP tools for agent scope"
+        )
+
+    @pytest.mark.anyio
     async def test_build_agent_tool_definitions_returns_partitioned_scopes(
         self,
         monkeypatch: pytest.MonkeyPatch,

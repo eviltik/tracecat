@@ -198,7 +198,10 @@ class AgentActivities:
                 http_servers = []
 
             try:
-                user_mcp_tools = await discover_user_mcp_tools(http_servers)
+                user_mcp_tools = await discover_user_mcp_tools(
+                    http_servers,
+                    fail_on_error=args.fail_on_mcp_discovery_error,
+                )
                 # Add user MCP tools to definitions
                 for tool_name, tool_def in user_mcp_tools.items():
                     defs[tool_name] = tool_def
