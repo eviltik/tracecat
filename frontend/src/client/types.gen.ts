@@ -553,6 +553,8 @@ export type AgentPresetReadMinimal = {
   description: string | null
   current_version_id?: string | null
   has_tool_approvals?: boolean
+  subagent_unavailable_code?: "agents_enabled" | "tool_approvals" | null
+  subagent_unavailable_reason?: string | null
   created_at: string
   updated_at: string
 }

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Mapping
 from datetime import datetime
-from typing import Annotated, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
@@ -12,6 +13,9 @@ from tracecat.agent.subagents import AgentsConfig, has_manual_tool_approvals
 from tracecat.agent.types import AgentConfig, OutputType
 from tracecat.core.schemas import Schema
 from tracecat.identifiers import WorkspaceID
+
+if TYPE_CHECKING:
+    from tracecat.db.models import AgentPreset
 
 
 class AgentPresetSkillBindingBase(Schema):
@@ -142,6 +146,8 @@ class AgentPresetReadMinimal(Schema):
     description: str | None
     current_version_id: uuid.UUID | None = None
     has_tool_approvals: bool = Field(default=False)
+    subagent_unavailable_code: Literal["agents_enabled", "tool_approvals"] | None = None
+    subagent_unavailable_reason: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -154,16 +160,45 @@ class AgentPresetWarning(BaseModel):
     subagent_aliases: list[str] = Field(default_factory=list)
 
 
-def build_agent_preset_read_minimal(preset: Any) -> AgentPresetReadMinimal:
+def build_agent_preset_read_minimal(
+    preset: AgentPreset,
+) -> AgentPresetReadMinimal:
     """Build a minimal preset response without exposing approval rule details."""
     read = AgentPresetReadMinimal.model_validate(preset)
+    agents_config = cast(AgentsConfig | Mapping[str, object] | None, preset.agents)
+    tool_approvals = cast(Mapping[str, bool] | None, preset.tool_approvals)
+    subagent_unavailable = _subagent_unavailable_metadata(
+        agents_config=agents_config,
+        tool_approvals=tool_approvals,
+    )
     return read.model_copy(
         update={
-            "has_tool_approvals": has_manual_tool_approvals(
-                getattr(preset, "tool_approvals", None)
-            )
+            "has_tool_approvals": has_manual_tool_approvals(tool_approvals),
+            "subagent_unavailable_code": subagent_unavailable[0],
+            "subagent_unavailable_reason": subagent_unavailable[1],
         }
     )
+
+
+def _subagent_unavailable_metadata(
+    *,
+    agents_config: AgentsConfig | Mapping[str, object] | None,
+    tool_approvals: Mapping[str, bool] | None,
+) -> tuple[Literal["agents_enabled", "tool_approvals"] | None, str | None]:
+    """Return why this preset cannot be attached as a preset-backed subagent."""
+
+    agents = AgentsConfig.model_validate(agents_config or {})
+    if agents.enabled:
+        return (
+            "agents_enabled",
+            "Subagents cannot define their own agents yet. Disable the Agent tool on this preset before attaching it as a subagent.",
+        )
+    if has_manual_tool_approvals(tool_approvals):
+        return (
+            "tool_approvals",
+            "Subagents with manual approvals are not supported yet. Remove approval requirements from this preset before attaching it as a subagent.",
+        )
+    return None, None
 
 
 class AgentPresetRead(AgentPresetExecutionConfig):

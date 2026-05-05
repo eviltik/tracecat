@@ -1,6 +1,7 @@
 """Validation tests for agent preset request schemas."""
 
-from types import SimpleNamespace
+import uuid
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import BaseModel, ValidationError
@@ -16,6 +17,29 @@ from tracecat.agent.preset.schemas import (
     AgentPresetVersionReadMinimal,
     build_agent_preset_read_minimal,
 )
+from tracecat.db.models import AgentPreset
+
+
+def make_agent_preset(
+    *,
+    name: str = "Preset",
+    slug: str = "preset",
+    tool_approvals: dict[str, bool] | None = None,
+    agents: dict[str, object] | None = None,
+) -> AgentPreset:
+    timestamp = datetime(2026, 3, 9, tzinfo=UTC)
+    return AgentPreset(
+        id=uuid.uuid4(),
+        workspace_id=uuid.uuid4(),
+        name=name,
+        slug=slug,
+        description=None,
+        current_version_id=None,
+        tool_approvals=tool_approvals,
+        agents=agents or {"enabled": False},
+        created_at=timestamp,
+        updated_at=timestamp,
+    )
 
 
 def test_agent_preset_create_trims_required_fields() -> None:
@@ -112,25 +136,38 @@ def test_agent_preset_read_schema_accepts_legacy_whitespace_model_fields() -> No
 
 def test_agent_preset_read_minimal_exposes_approval_boolean_only() -> None:
     payload = build_agent_preset_read_minimal(
-        SimpleNamespace(
-            id="522b4d28-ae2b-4705-bb53-c3aa9071fe16",
-            workspace_id="6b2bb4d8-8461-486d-b4ca-e10a5a19d2f2",
+        make_agent_preset(
             name="Approval preset",
             slug="approval-preset",
-            description=None,
-            current_version_id=None,
             tool_approvals={
                 "core.http_request": False,
                 "core.cases.create_case": True,
             },
-            created_at="2026-03-09T00:00:00Z",
-            updated_at="2026-03-09T00:00:00Z",
         )
     )
 
     dumped = payload.model_dump(mode="json")
     assert dumped["has_tool_approvals"] is True
+    assert dumped["subagent_unavailable_code"] == "tool_approvals"
+    assert dumped["subagent_unavailable_reason"] is not None
     assert "tool_approvals" not in dumped
+
+
+def test_agent_preset_read_minimal_exposes_agents_subagent_unavailable_reason() -> None:
+    payload = build_agent_preset_read_minimal(
+        make_agent_preset(
+            name="Parent preset",
+            slug="parent-preset",
+            tool_approvals={"core.http_request": True},
+            agents={"enabled": True, "subagents": []},
+        )
+    )
+
+    dumped = payload.model_dump(mode="json")
+    assert dumped["subagent_unavailable_code"] == "agents_enabled"
+    assert dumped["subagent_unavailable_reason"] is not None
+    assert dumped["has_tool_approvals"] is True
+    assert "agents" not in dumped
 
 
 def test_agent_preset_version_read_schema_accepts_legacy_whitespace_model_fields() -> (

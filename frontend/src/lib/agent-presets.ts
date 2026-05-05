@@ -7,29 +7,24 @@ import { slugify } from "@/lib/utils"
 
 export type AgentPresetFormMode = "create" | "edit"
 
-export const SUBAGENT_APPROVAL_UNAVAILABLE_MESSAGE =
-  "Subagents with manual approvals are not supported yet. Remove approval requirements from this preset before attaching it as a subagent."
-
-export function agentPresetHasManualApprovals(
-  preset: Pick<AgentPresetReadMinimal, "has_tool_approvals">
-): boolean {
-  return preset.has_tool_approvals === true
+export function getSubagentPresetUnavailableReason(
+  preset: Pick<AgentPresetReadMinimal, "subagent_unavailable_reason">
+): string | null {
+  return preset.subagent_unavailable_reason ?? null
 }
 
-export function getSubagentPresetUnavailableReason(
-  preset: Pick<AgentPresetReadMinimal, "has_tool_approvals">
-): string | null {
-  return agentPresetHasManualApprovals(preset)
-    ? SUBAGENT_APPROVAL_UNAVAILABLE_MESSAGE
-    : null
+export function getSubagentPresetUnavailableCode(
+  preset: Pick<AgentPresetReadMinimal, "subagent_unavailable_code">
+): AgentPresetReadMinimal["subagent_unavailable_code"] | null {
+  return preset.subagent_unavailable_code ?? null
 }
 
 export function getUnavailableSubagentPresetSlugs(
-  presets: Pick<AgentPresetReadMinimal, "slug" | "has_tool_approvals">[]
+  presets: Pick<AgentPresetReadMinimal, "slug" | "subagent_unavailable_code">[]
 ): Set<string> {
   return new Set(
     presets
-      .filter((preset) => agentPresetHasManualApprovals(preset))
+      .filter((preset) => getSubagentPresetUnavailableCode(preset) !== null)
       .map((preset) => preset.slug)
   )
 }

@@ -2278,6 +2278,29 @@ export const $AgentPresetReadMinimal = {
       title: "Has Tool Approvals",
       default: false,
     },
+    subagent_unavailable_code: {
+      anyOf: [
+        {
+          type: "string",
+          enum: ["agents_enabled", "tool_approvals"],
+        },
+        {
+          type: "null",
+        },
+      ],
+      title: "Subagent Unavailable Code",
+    },
+    subagent_unavailable_reason: {
+      anyOf: [
+        {
+          type: "string",
+        },
+        {
+          type: "null",
+        },
+      ],
+      title: "Subagent Unavailable Reason",
+    },
     created_at: {
       type: "string",
       format: "date-time",

@@ -1,11 +1,10 @@
 import {
-  agentPresetHasManualApprovals,
   buildDuplicateAgentPresetPayload,
   buildDuplicateAgentSlug,
   canSubmitAgentPresetForm,
+  getSubagentPresetUnavailableCode,
   getSubagentPresetUnavailableReason,
   getUnavailableSubagentPresetSlugs,
-  SUBAGENT_APPROVAL_UNAVAILABLE_MESSAGE,
 } from "@/lib/agent-presets"
 
 describe("canSubmitAgentPresetForm", () => {
@@ -108,19 +107,40 @@ describe("canSubmitAgentPresetForm", () => {
     const preset = {
       slug: "approval-child",
       has_tool_approvals: true,
+      subagent_unavailable_code: "tool_approvals" as const,
+      subagent_unavailable_reason: "Approvals are unavailable for subagents.",
     }
     const availablePreset = {
       slug: "auto-child",
       has_tool_approvals: false,
+      subagent_unavailable_code: null,
+      subagent_unavailable_reason: null,
     }
 
-    expect(agentPresetHasManualApprovals(preset)).toBe(true)
     expect(getSubagentPresetUnavailableReason(preset)).toBe(
-      SUBAGENT_APPROVAL_UNAVAILABLE_MESSAGE
+      "Approvals are unavailable for subagents."
     )
+    expect(getSubagentPresetUnavailableCode(preset)).toBe("tool_approvals")
     expect(getSubagentPresetUnavailableReason(availablePreset)).toBeNull()
     expect(
       getUnavailableSubagentPresetSlugs([preset, availablePreset])
     ).toEqual(new Set(["approval-child"]))
+  })
+
+  it("marks presets with agents unavailable as subagents", () => {
+    const preset = {
+      slug: "nested-child",
+      has_tool_approvals: false,
+      subagent_unavailable_code: "agents_enabled" as const,
+      subagent_unavailable_reason: "Agents are unavailable for subagents.",
+    }
+
+    expect(getSubagentPresetUnavailableReason(preset)).toBe(
+      "Agents are unavailable for subagents."
+    )
+    expect(getSubagentPresetUnavailableCode(preset)).toBe("agents_enabled")
+    expect(getUnavailableSubagentPresetSlugs([preset])).toEqual(
+      new Set(["nested-child"])
+    )
   })
 })

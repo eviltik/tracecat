@@ -146,9 +146,9 @@ import { useSkills, useSkillVersions } from "@/hooks/use-skills"
 import {
   type AgentPresetFormMode,
   buildDuplicateAgentPresetPayload,
+  getSubagentPresetUnavailableCode,
   getSubagentPresetUnavailableReason,
   getUnavailableSubagentPresetSlugs,
-  SUBAGENT_APPROVAL_UNAVAILABLE_MESSAGE,
 } from "@/lib/agent-presets"
 import type { ModelInfo } from "@/lib/chat"
 import { getApiErrorDetail } from "@/lib/errors"
@@ -1353,9 +1353,18 @@ function AgentPresetForm({
           unavailableSubagentPresetSlugs.has(subagent.preset.trim())
         )
         if (unavailableIndex >= 0) {
+          const unavailablePreset = agentPresets.find(
+            (preset) =>
+              preset.slug === values.subagents[unavailableIndex].preset.trim()
+          )
+          const unavailableMessage = unavailablePreset
+            ? getSubagentPresetUnavailableReason(unavailablePreset)
+            : null
           form.setError(`subagents.${unavailableIndex}.preset`, {
             type: "manual",
-            message: SUBAGENT_APPROVAL_UNAVAILABLE_MESSAGE,
+            message:
+              unavailableMessage ??
+              "This preset cannot be attached as a subagent.",
           })
           setActiveTab("subagents")
           return
@@ -2517,6 +2526,12 @@ function AgentPresetSubagentsPanel({
                                   {presetOptions.map((preset) => {
                                     const unavailableReason =
                                       getSubagentPresetUnavailableReason(preset)
+                                    const unavailableCode =
+                                      getSubagentPresetUnavailableCode(preset)
+                                    const unavailableBadge =
+                                      unavailableCode === "agents_enabled"
+                                        ? "Agents"
+                                        : "Approvals"
                                     const optionLabel = (
                                       <span className="flex min-w-0 items-center gap-2">
                                         <span className="min-w-0 truncate">
@@ -2527,7 +2542,7 @@ function AgentPresetSubagentsPanel({
                                         </span>
                                         {unavailableReason ? (
                                           <span className="ml-auto shrink-0 rounded border border-border px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground">
-                                            Approvals
+                                            {unavailableBadge}
                                           </span>
                                         ) : null}
                                       </span>
