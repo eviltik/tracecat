@@ -951,6 +951,11 @@ class ClaudeAgentRuntime:
             ):
                 disallowed_tools.extend(INTERNET_TOOLS)
 
+            allowed_tools = self._allowed_tools_for_mcp_scope(
+                registry_server_name=registry_server_name,
+                actions=subagent.allowed_actions,
+                stdio_server_names=list(stdio_mcp_servers),
+            )
             definitions[subagent.alias] = AgentDefinition(
                 description=subagent.description,
                 prompt=subagent.prompt,
@@ -962,12 +967,7 @@ class ClaudeAgentRuntime:
                         passthrough=subagent.config.passthrough,
                     )
                 ),
-                tools=self._allowed_tools_for_mcp_scope(
-                    registry_server_name=registry_server_name,
-                    actions=subagent.allowed_actions,
-                    stdio_server_names=list(stdio_mcp_servers),
-                )
-                or None,
+                tools=allowed_tools,
                 mcpServers=mcp_server_configs or None,
                 disallowedTools=disallowed_tools,
                 maxTurns=subagent.max_turns,

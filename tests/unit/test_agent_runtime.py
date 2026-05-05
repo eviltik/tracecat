@@ -817,6 +817,31 @@ class TestClaudeAgentRuntimeRun:
             "WebSearch",
         }
 
+    def test_explicit_subagent_without_scoped_tools_stays_toolless(
+        self,
+        mock_socket_writer: MagicMock,
+        sample_init_payload: RuntimeInitPayload,
+    ) -> None:
+        child = SandboxSubagentConfig(
+            alias="analyst",
+            description="Use for enrichment analysis.",
+            prompt="Analyze enrichment data.",
+            config=sample_init_payload.config,
+            mcp_auth_token="child-mcp-token",
+        )
+        payload = replace(sample_init_payload, subagents=[child])
+        runtime = ClaudeAgentRuntime(
+            mock_socket_writer,
+            transport_factory=lambda _: MagicMock(),
+        )
+
+        definitions = runtime._build_agent_definitions(payload=payload)
+
+        assert definitions is not None
+        agent_def = definitions["analyst"]
+        assert agent_def.tools == []
+        assert agent_def.mcpServers is None
+
     @pytest.mark.anyio
     async def test_root_internet_policy_disables_subagent_internet_tools(
         self,
