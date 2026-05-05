@@ -14,6 +14,7 @@ from sqlalchemy import func, select
 
 from tracecat.agent.access.service import AgentModelAccessService
 from tracecat.agent.common.types import MCPHttpServerConfig
+from tracecat.agent.preset.resolver import resolve_agents_config
 from tracecat.agent.preset.schemas import (
     AgentPresetCreate,
     AgentPresetRead,
@@ -34,10 +35,7 @@ from tracecat.agent.skill.service import SkillService
 from tracecat.agent.subagents import (
     AgentsConfig,
     AnyAttachedSubagentRef,
-    ResolvedAgentsConfig,
     ResolvedAttachedSubagentRef,
-    has_manual_tool_approvals,
-    validate_subagent_alias,
 )
 from tracecat.agent.types import (
     AgentConfig,
@@ -628,64 +626,13 @@ class AgentPresetService(BaseWorkspaceService):
         parent_slug: str,
     ) -> dict[str, Any]:
         """Resolve and validate a preset's subagent configuration."""
-        config = AgentsConfig.model_validate({} if agents is None else agents)
-        if not config.enabled:
-            return config.model_dump(mode="json")
-
-        aliases: set[str] = set()
-        resolved_refs: list[ResolvedAttachedSubagentRef] = []
-        for ref in config.subagents:
-            alias = ref.alias
-            try:
-                validate_subagent_alias(alias)
-            except ValueError as err:
-                raise TracecatValidationError(str(err)) from err
-            if alias in aliases:
-                raise TracecatValidationError(
-                    f"Duplicate subagent alias '{alias}' in agents config"
-                )
-            aliases.add(alias)
-
-            preset_version_id = getattr(ref, "preset_version_id", None)
-            if preset_version_id is not None:
-                version = await self.resolve_agent_preset_version(
-                    preset_version_id=preset_version_id,
-                )
-            else:
-                version = await self.resolve_agent_preset_version(
-                    slug=ref.preset,
-                    preset_version=ref.preset_version,
-                )
-            if version.preset_id == parent_preset_id or ref.preset == parent_slug:
-                raise TracecatValidationError(
-                    "Agent presets cannot reference themselves"
-                )
-            child_agents = AgentsConfig.model_validate(version.agents)
-            if child_agents.enabled:
-                raise TracecatValidationError(
-                    f"Subagent preset '{ref.preset}' cannot define its own agents in v1"
-                )
-            if has_manual_tool_approvals(version.tool_approvals):
-                raise TracecatValidationError(
-                    f"Subagent preset '{ref.preset}' uses manual approvals, "
-                    "which are not supported for subagents yet."
-                )
-
-            resolved_refs.append(
-                ResolvedAttachedSubagentRef(
-                    preset=ref.preset,
-                    preset_version=version.version,
-                    name=ref.name,
-                    description=ref.description,
-                    max_turns=ref.max_turns,
-                    preset_id=version.preset_id,
-                    preset_version_id=version.id,
-                )
-            )
-
-        return ResolvedAgentsConfig(enabled=True, subagents=resolved_refs).model_dump(
-            mode="json"
+        resolved = await resolve_agents_config(
+            self,
+            agents=agents,
+            parent_preset_id=parent_preset_id,
+            parent_slug=parent_slug,
         )
+        return resolved.to_agents_binding().model_dump(mode="json")
 
     def _decrypt_mcp_headers(
         self,

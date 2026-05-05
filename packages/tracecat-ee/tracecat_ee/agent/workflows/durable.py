@@ -15,7 +15,11 @@ with workflow.unsafe.imports_passed_through():
 
     from tracecat import config
     from tracecat.agent.common.stream_types import HarnessType
-    from tracecat.agent.common.types import SandboxAgentConfig, SandboxSubagentConfig
+    from tracecat.agent.common.types import (
+        MCPToolDefinition,
+        SandboxAgentConfig,
+        SandboxSubagentConfig,
+    )
     from tracecat.agent.executor.activity import (
         AgentExecutorInput,
         ApprovedToolCall,
@@ -88,6 +92,7 @@ with workflow.unsafe.imports_passed_through():
 
 
 AGENT_TOOL_DEFINITION_ERROR = "AgentToolDefinitionError"
+ROOT_AGENT_SCOPE = "root"
 
 
 def _activity_error_message(error: ActivityError) -> str:
@@ -156,6 +161,90 @@ def _llm_route_for_config(
 def _subagent_litellm_route_model(alias: str, route_model: str) -> str:
     """Return a unique incoming LiteLLM model key for one subagent scope."""
     return f"{route_model}::tracecat-subagent::{alias}"
+
+
+class AgentScopeSpec(BaseModel):
+    """Workflow-local description of one agent tool/token scope."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
+
+    name: str
+    config: AgentConfig
+    internal_tool_context: InternalToolContext | None = None
+    fail_on_mcp_discovery_error: bool = False
+
+    def to_tool_defs_arg(self) -> BuildAgentScopeToolDefsArgs:
+        return BuildAgentScopeToolDefsArgs(
+            scope=self.name,
+            tool_filters=ToolFilters(
+                namespaces=self.config.namespaces,
+                actions=self.config.actions,
+            ),
+            tool_approvals=self.config.tool_approvals,
+            mcp_servers=self.config.mcp_servers,
+            internal_tool_context=self.internal_tool_context,
+            fail_on_mcp_discovery_error=self.fail_on_mcp_discovery_error,
+        )
+
+
+class SubagentScopeSpec(BaseModel):
+    """Subagent metadata paired with its shared compile scope."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
+
+    scope: AgentScopeSpec
+    resolved: ResolvedSubagentConfig
+
+
+class CompiledAgentScope(BaseModel):
+    """Workflow-local compiled form of one agent scope."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
+
+    spec: AgentScopeSpec
+    build_result: BuildToolDefsResult
+    mcp_auth_token: str
+    model_route: str | None = None
+
+    @property
+    def tool_definitions(self) -> dict[str, MCPToolDefinition]:
+        return self.build_result.tool_definitions
+
+
+class CompiledSubagentScope(BaseModel):
+    """Compiled subagent scope plus child-only runtime metadata."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
+
+    scope: CompiledAgentScope
+    resolved: ResolvedSubagentConfig
+
+    def to_sandbox_subagent(self) -> SandboxSubagentConfig:
+        return SandboxSubagentConfig(
+            alias=self.resolved.alias,
+            description=self.resolved.description,
+            prompt=self.resolved.prompt,
+            max_turns=self.resolved.max_turns,
+            config=SandboxAgentConfig.from_agent_config(self.scope.spec.config),
+            mcp_auth_token=self.scope.mcp_auth_token,
+            model_route=self.scope.model_route,
+            allowed_actions=self.scope.tool_definitions,
+        )
+
+
+class CompiledAgentRun(BaseModel):
+    """Workflow-local compiled runtime inputs for a root agent plus subagents."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
+
+    root: CompiledAgentScope
+    subagents: list[CompiledSubagentScope]
+    registry_lock: RegistryLock
+    llm_routes: dict[str, LLMRouteClaim]
+
+    @property
+    def sandbox_subagents(self) -> list[SandboxSubagentConfig]:
+        return [subagent.to_sandbox_subagent() for subagent in self.subagents]
 
 
 class AgentWorkflowArgs(BaseModel):
@@ -381,68 +470,79 @@ class DurableAgentWorkflow:
                 role=self.role,
                 agents=cfg.agents,
                 parent_preset_id=args.agent_preset_id,
+                parent_slug=args.agent_args.preset_slug,
             ),
             start_to_close_timeout=timedelta(seconds=30),
             retry_policy=RETRY_POLICIES["activity:fail_fast"],
         )
 
-    async def _compile_agent_scopes(
+    def _mint_scope_mcp_token(
+        self,
+        *,
+        build_result: BuildToolDefsResult,
+        internal_tool_context: InternalToolContext | None = None,
+    ) -> str:
+        info = workflow.info()
+        return mint_mcp_token(
+            workspace_id=self.workspace_id,
+            organization_id=self.organization_id,
+            user_id=self.role.user_id,
+            allowed_actions=list(build_result.tool_definitions.keys()),
+            session_id=self.session_id,
+            parent_agent_workflow_id=info.workflow_id,
+            parent_agent_run_id=info.run_id,
+            user_mcp_servers=build_result.user_mcp_claims,
+            allowed_internal_tools=build_result.allowed_internal_tools,
+            internal_tool_context=internal_tool_context,
+        )
+
+    async def _compile_agent_run(
         self,
         *,
         cfg: AgentConfig,
         subagents: list[ResolvedSubagentConfig],
         internal_tool_context: InternalToolContext | None,
         use_workspace_credentials: bool,
-    ) -> tuple[
-        BuildToolDefsResult,
-        RegistryLock,
-        list[SandboxSubagentConfig],
-        dict[str, LLMRouteClaim],
-    ]:
-        scope_args = [
-            BuildAgentScopeToolDefsArgs(
-                scope="root",
-                tool_filters=ToolFilters(
-                    namespaces=cfg.namespaces,
-                    actions=cfg.actions,
-                ),
-                tool_approvals=cfg.tool_approvals,
-                mcp_servers=cfg.mcp_servers,
-                internal_tool_context=internal_tool_context,
-            )
-        ]
-        prepared_subagents: list[tuple[ResolvedSubagentConfig, AgentConfig]] = []
-        for subagent in subagents:
-            child_cfg = agent_config_from_payload(subagent.config)
+    ) -> CompiledAgentRun:
+        root_spec = AgentScopeSpec(
+            name=ROOT_AGENT_SCOPE,
+            config=cfg,
+            internal_tool_context=internal_tool_context,
+        )
+        subagent_specs: list[SubagentScopeSpec] = []
+        scope_specs = [root_spec]
+        for resolved_subagent in subagents:
+            child_cfg = agent_config_from_payload(resolved_subagent.config)
             if has_manual_tool_approvals(child_cfg.tool_approvals):
                 raise ApplicationError(
-                    f"Subagent preset '{subagent.binding.preset}' uses manual approvals, "
+                    f"Subagent preset '{resolved_subagent.binding.preset}' uses manual approvals, "
                     "which are not supported for subagents yet.",
                     non_retryable=True,
                 )
             await self._apply_custom_model_provider_config(child_cfg)
-            prepared_subagents.append((subagent, child_cfg))
-            scope_args.append(
-                BuildAgentScopeToolDefsArgs(
-                    scope=subagent.alias,
-                    tool_filters=ToolFilters(
-                        namespaces=child_cfg.namespaces,
-                        actions=child_cfg.actions,
-                    ),
-                    tool_approvals=child_cfg.tool_approvals,
-                    mcp_servers=child_cfg.mcp_servers,
-                    fail_on_mcp_discovery_error=True,
+            scope_spec = AgentScopeSpec(
+                name=resolved_subagent.alias,
+                config=child_cfg,
+                fail_on_mcp_discovery_error=True,
+            )
+            subagent_specs.append(
+                SubagentScopeSpec(
+                    scope=scope_spec,
+                    resolved=resolved_subagent,
                 )
             )
+            scope_specs.append(scope_spec)
 
         try:
             build_result = await workflow.execute_activity_method(
                 AgentActivities.build_agent_tool_definitions,
                 arg=BuildAgentToolDefsArgs(
                     role=self.role,
-                    scopes=scope_args,
+                    scopes=[spec.to_tool_defs_arg() for spec in scope_specs],
                 ),
-                start_to_close_timeout=timedelta(seconds=120 * max(1, len(scope_args))),
+                start_to_close_timeout=timedelta(
+                    seconds=120 * max(1, len(scope_specs))
+                ),
                 retry_policy=RETRY_POLICIES["activity:fail_fast"],
             )
         except ActivityError as e:
@@ -450,65 +550,63 @@ class DurableAgentWorkflow:
                 raise e.cause from e
             raise
 
-        root_build_result = build_result.scopes.get("root")
+        root_build_result = build_result.scopes.get(ROOT_AGENT_SCOPE)
         if root_build_result is None:
             raise ApplicationError(
                 "Batched agent tool compilation did not return the root scope",
                 non_retryable=True,
             )
 
-        compiled: list[SandboxSubagentConfig] = []
+        root_scope = CompiledAgentScope(
+            spec=root_spec,
+            build_result=root_build_result,
+            mcp_auth_token=self._mint_scope_mcp_token(
+                build_result=root_build_result,
+                internal_tool_context=internal_tool_context,
+            ),
+        )
+        compiled_subagents: list[CompiledSubagentScope] = []
         registry_locks = [root_build_result.registry_lock]
         llm_routes: dict[str, LLMRouteClaim] = {}
 
-        info = workflow.info()
-        for subagent, child_cfg in prepared_subagents:
-            child_build_result = build_result.scopes.get(subagent.alias)
+        for subagent_spec in subagent_specs:
+            scope_spec = subagent_spec.scope
+            child_build_result = build_result.scopes.get(scope_spec.name)
             if child_build_result is None:
                 raise ApplicationError(
-                    f"Batched agent tool compilation did not return scope '{subagent.alias}'",
+                    f"Batched agent tool compilation did not return scope '{scope_spec.name}'",
                     non_retryable=True,
                 )
             route_model, route_claim = _llm_route_for_config(
-                child_cfg,
+                scope_spec.config,
                 use_workspace_credentials=use_workspace_credentials,
             )
             scoped_route_model = _subagent_litellm_route_model(
-                subagent.alias,
+                scope_spec.name,
                 route_model,
             )
             llm_routes[scoped_route_model] = route_claim
 
-            mcp_auth_token = mint_mcp_token(
-                workspace_id=self.workspace_id,
-                organization_id=self.organization_id,
-                user_id=self.role.user_id,
-                allowed_actions=list(child_build_result.tool_definitions.keys()),
-                session_id=self.session_id,
-                parent_agent_workflow_id=info.workflow_id,
-                parent_agent_run_id=info.run_id,
-                user_mcp_servers=child_build_result.user_mcp_claims,
-                allowed_internal_tools=child_build_result.allowed_internal_tools,
-            )
-            compiled.append(
-                SandboxSubagentConfig(
-                    alias=subagent.alias,
-                    description=subagent.description,
-                    prompt=subagent.prompt,
-                    max_turns=subagent.max_turns,
-                    config=SandboxAgentConfig.from_agent_config(child_cfg),
-                    mcp_auth_token=mcp_auth_token,
-                    model_route=scoped_route_model,
-                    allowed_actions=child_build_result.tool_definitions,
+            compiled_subagents.append(
+                CompiledSubagentScope(
+                    scope=CompiledAgentScope(
+                        spec=scope_spec,
+                        build_result=child_build_result,
+                        mcp_auth_token=self._mint_scope_mcp_token(
+                            build_result=child_build_result,
+                        ),
+                        model_route=scoped_route_model,
+                    ),
+                    resolved=subagent_spec.resolved,
                 )
             )
             registry_locks.append(child_build_result.registry_lock)
 
-        return (
-            root_build_result,
-            _merge_registry_locks(*registry_locks),
-            compiled,
-            llm_routes,
+        return CompiledAgentRun(
+            root=root_scope,
+            subagents=compiled_subagents,
+            registry_lock=_merge_registry_locks(*registry_locks),
+            llm_routes=llm_routes,
         )
 
     @workflow.run
@@ -644,20 +742,14 @@ class DurableAgentWorkflow:
 
         # Resolve root and subagent tool definitions in one activity, while
         # preserving partitioned outputs for scope-specific tokens and locks.
-        (
-            build_result,
-            self._registry_lock,
-            compiled_subagents,
-            subagent_llm_routes,
-        ) = await self._compile_agent_scopes(
+        compiled_run = await self._compile_agent_run(
             cfg=cfg,
             subagents=agents_result.subagents,
             internal_tool_context=internal_tool_context,
             use_workspace_credentials=False,
         )
-        allowed_actions = build_result.tool_definitions
-        user_mcp_claims = build_result.user_mcp_claims
-        allowed_internal_tools = build_result.allowed_internal_tools
+        self._registry_lock = compiled_run.registry_lock
+        allowed_actions = compiled_run.root.tool_definitions
 
         logger.debug(
             "Resolved tool definitions",
@@ -685,21 +777,8 @@ class DurableAgentWorkflow:
                 is_fork=is_fork,
             )
 
-        # Mint tokens for MCP server and LLM gateway auth
-        # These tokens are opaque to the jailed runtime - it cannot decode them
-        info = workflow.info()
-        mcp_auth_token = mint_mcp_token(
-            workspace_id=self.workspace_id,
-            organization_id=self.organization_id,
-            user_id=self.role.user_id,
-            allowed_actions=list(allowed_actions.keys()),
-            session_id=self.session_id,
-            parent_agent_workflow_id=info.workflow_id,
-            parent_agent_run_id=info.run_id,
-            user_mcp_servers=user_mcp_claims,
-            allowed_internal_tools=allowed_internal_tools,
-            internal_tool_context=internal_tool_context,
-        )
+        # Mint the LLM gateway token after compiling subagent routes. MCP tokens
+        # are scoped and minted as part of the compiled agent run.
         llm_gateway_auth_token = mint_llm_token(
             workspace_id=self.workspace_id,
             organization_id=self.organization_id,
@@ -710,7 +789,7 @@ class DurableAgentWorkflow:
             base_url=cfg.base_url,
             model_settings=cfg.model_settings,
             use_workspace_credentials=False,
-            routes=subagent_llm_routes,
+            routes=compiled_run.llm_routes,
         )
 
         # Prepare executor input
@@ -720,10 +799,10 @@ class DurableAgentWorkflow:
             user_prompt=args.agent_args.user_prompt,
             config=cfg,
             role=self.role,
-            mcp_auth_token=mcp_auth_token,
+            mcp_auth_token=compiled_run.root.mcp_auth_token,
             llm_gateway_auth_token=llm_gateway_auth_token,
             allowed_actions=allowed_actions,
-            subagents=compiled_subagents,
+            subagents=compiled_run.sandbox_subagents,
             sdk_session_id=self._sdk_session_id,
             sdk_session_data=self._sdk_session_data,
             is_fork=is_fork,
@@ -820,10 +899,10 @@ class DurableAgentWorkflow:
                     user_prompt=args.agent_args.user_prompt,
                     config=cfg,
                     role=self.role,
-                    mcp_auth_token=mcp_auth_token,
+                    mcp_auth_token=compiled_run.root.mcp_auth_token,
                     llm_gateway_auth_token=llm_gateway_auth_token,
                     allowed_actions=allowed_actions,
-                    subagents=compiled_subagents,
+                    subagents=compiled_run.sandbox_subagents,
                     sdk_session_id=self._sdk_session_id,
                     sdk_session_data=self._sdk_session_data,
                     is_approval_continuation=True,
