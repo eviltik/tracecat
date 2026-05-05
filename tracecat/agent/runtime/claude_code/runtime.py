@@ -215,7 +215,6 @@ class ClaudeAgentRuntime:
         # Public for testing - these represent runtime configuration
         self.registry_tools: dict[str, MCPToolDefinition] | None = None
         self.tool_approvals: dict[str, bool] | None = None
-        self._scope_tool_approvals: dict[str, dict[str, bool] | None] = {}
         self._scope_internet_access: dict[str, bool] = {}
         self._explicit_subagent_aliases: set[str] = set()
         self._registry_mcp_server_names: set[str] = {REGISTRY_MCP_SERVER_NAME}
@@ -377,27 +376,42 @@ class ClaudeAgentRuntime:
     def _is_subagent_scope(input_data: HookInput) -> bool:
         return bool(input_data.get("agent_id"))
 
-    def _hook_scope(self, input_data: HookInput) -> str:
+    def _hook_agent_type(self, input_data: HookInput) -> str | None:
         if self._is_subagent_scope(input_data):
             agent_type = input_data.get("agent_type")
             if isinstance(agent_type, str) and agent_type:
                 return agent_type
+        return None
+
+    def _internet_policy_scope(self, input_data: HookInput) -> str:
+        agent_type = self._hook_agent_type(input_data)
+        if agent_type in self._explicit_subagent_aliases:
+            return agent_type
         return "root"
 
-    def _policy_scope(self, input_data: HookInput) -> str:
-        scope = self._hook_scope(input_data)
-        if scope in self._explicit_subagent_aliases:
-            return scope
-        # Dynamic/general-purpose subagents inherit root tools and approvals.
-        return "root"
+    def _explicit_subagent_alias_for_tool(
+        self,
+        input_data: HookInput,
+        tool_name: str,
+    ) -> str | None:
+        agent_type = self._hook_agent_type(input_data)
+        if agent_type in self._explicit_subagent_aliases:
+            return agent_type
 
-    def _approval_metadata(self, input_data: HookInput) -> dict[str, Any]:
-        scope = self._hook_scope(input_data)
-        return {
-            "agent_scope": scope,
-            "agent_alias": scope if scope in self._explicit_subagent_aliases else None,
-            "agent_id": input_data.get("agent_id"),
-        }
+        for alias in self._explicit_subagent_aliases:
+            server_name = self._subagent_registry_server_name(alias)
+            if tool_name.startswith((f"mcp__{server_name}__", f"mcp.{server_name}.")):
+                return alias
+        return None
+
+    def _uses_root_approval_policy(
+        self,
+        input_data: HookInput,
+        tool_name: str,
+    ) -> bool:
+        # Preset-backed subagents cannot require manual approvals in v1.
+        # Dynamic/general-purpose subagents still inherit root approvals.
+        return self._explicit_subagent_alias_for_tool(input_data, tool_name) is None
 
     @staticmethod
     def _agent_tool_target(tool_input: dict[str, Any]) -> str | None:
@@ -734,8 +748,6 @@ class ClaudeAgentRuntime:
         tool_name: str,
         tool_input: dict[str, Any],
         tool_use_id: str,
-        *,
-        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Handle an approval request by streaming and interrupting.
 
@@ -750,7 +762,6 @@ class ClaudeAgentRuntime:
                     id=tool_use_id,
                     name=tool_name,
                     input=tool_input,
-                    metadata=metadata,
                 )
             ]
         )
@@ -795,9 +806,9 @@ class ClaudeAgentRuntime:
                 }
             }
 
-        policy_scope = self._policy_scope(input_data)
+        internet_policy_scope = self._internet_policy_scope(input_data)
         if tool_name in INTERNET_TOOLS and not self._scope_internet_access.get(
-            policy_scope, False
+            internet_policy_scope, False
         ):
             return {
                 "hookSpecificOutput": {
@@ -805,17 +816,15 @@ class ClaudeAgentRuntime:
                     "permissionDecision": "deny",
                     "permissionDecisionReason": (
                         f"Tool '{tool_name}' is disabled for agent scope "
-                        f"'{policy_scope}'."
+                        f"'{internet_policy_scope}'."
                     ),
                 }
             }
 
-        scope_approvals = self._scope_tool_approvals.get(
-            policy_scope,
-            self.tool_approvals,
-        )
         requires_approval = (
-            scope_approvals is not None and scope_approvals.get(action_name) is True
+            self._uses_root_approval_policy(input_data, tool_name)
+            and self.tool_approvals is not None
+            and self.tool_approvals.get(action_name) is True
         )
 
         if requires_approval:
@@ -827,7 +836,6 @@ class ClaudeAgentRuntime:
                 action_name,
                 tool_input,
                 tool_use_id,
-                metadata=self._approval_metadata(input_data),
             )
             return {
                 "hookSpecificOutput": {
@@ -1018,13 +1026,6 @@ class ClaudeAgentRuntime:
                 for subagent in payload.subagents
                 if subagent.allowed_actions
             ),
-        }
-        self._scope_tool_approvals = {
-            "root": payload.config.tool_approvals,
-            **{
-                subagent.alias: subagent.config.tool_approvals
-                for subagent in payload.subagents
-            },
         }
         root_internet_access = payload.config.enable_internet_access
         self._scope_internet_access = {

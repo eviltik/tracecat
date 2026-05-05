@@ -1711,7 +1711,7 @@ class TestClaudeAgentRuntimePreToolUseHook:
         assert "not available" in (hook_output.get("permissionDecisionReason") or "")
 
     @pytest.mark.anyio
-    async def test_child_approval_request_includes_agent_scope_metadata(
+    async def test_explicit_subagents_do_not_use_root_approval_policy(
         self,
         mock_socket_writer: MagicMock,
     ) -> None:
@@ -1720,7 +1720,11 @@ class TestClaudeAgentRuntimePreToolUseHook:
         )
         runtime._root_agents_enabled = True
         runtime._explicit_subagent_aliases = {"analyst"}
-        runtime._scope_tool_approvals = {"analyst": {"core.http_request": True}}
+        runtime._registry_mcp_server_names = {
+            "tracecat-registry",
+            "tracecat-registry-analyst",
+        }
+        runtime.tool_approvals = {"core.http_request": True}
         runtime.client = MagicMock()
         runtime.client.interrupt = AsyncMock()
 
@@ -1730,21 +1734,15 @@ class TestClaudeAgentRuntimePreToolUseHook:
                 tool_input={"url": "https://example.com"},
                 tool_use_id="call-child-approval",
                 agent_id="agent-123",
-                agent_type="analyst",
             ),
             tool_use_id="call-child-approval",
             context=make_hook_context(),
         )
 
         hook_output = get_hook_output(result)
-        assert hook_output.get("permissionDecision") == "deny"
-        approval_event = mock_socket_writer.send_stream_event.await_args.args[0]
-        [approval_item] = approval_event.approval_items or []
-        assert approval_item.metadata == {
-            "agent_scope": "analyst",
-            "agent_alias": "analyst",
-            "agent_id": "agent-123",
-        }
+        assert hook_output.get("permissionDecision") == "allow"
+        assert mock_socket_writer.send_stream_event.await_args is None
+        runtime.client.interrupt.assert_not_awaited()
 
 
 class TestClaudeAgentRuntimeStopHook:
