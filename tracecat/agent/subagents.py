@@ -11,6 +11,8 @@ from pydantic import (
     ConfigDict,
     Field,
     StringConstraints,
+    TypeAdapter,
+    ValidationError,
     model_validator,
 )
 
@@ -23,6 +25,7 @@ AgentAlias = Annotated[
         pattern=r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
     ),
 ]
+_AGENT_ALIAS_ADAPTER = TypeAdapter(AgentAlias)
 
 PresetRef = Annotated[
     str,
@@ -99,8 +102,15 @@ class ResolvedAgentsConfig(BaseModel):
 
 def validate_subagent_alias(alias: str) -> None:
     """Reject aliases reserved by Claude or Tracecat runtime semantics."""
-    if alias in RESERVED_SUBAGENT_ALIASES:
-        raise ValueError(f"Subagent alias '{alias}' is reserved")
+    try:
+        normalized_alias = _AGENT_ALIAS_ADAPTER.validate_python(alias)
+    except ValidationError as err:
+        raise ValueError(
+            f"Invalid subagent alias '{alias}'. Use lowercase letters, numbers, "
+            "and hyphens; start and end with a letter or number."
+        ) from err
+    if normalized_alias in RESERVED_SUBAGENT_ALIASES:
+        raise ValueError(f"Subagent alias '{normalized_alias}' is reserved")
 
 
 def has_manual_tool_approvals(

@@ -271,6 +271,39 @@ async def test_resolve_agents_config_rejects_subagent_with_tool_approvals(
 
 
 @pytest.mark.anyio
+async def test_resolve_agents_config_rejects_invalid_fallback_alias(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    role = Role(
+        type="service",
+        service_id="tracecat-api",
+        workspace_id=uuid.uuid4(),
+        organization_id=uuid.uuid4(),
+    )
+
+    monkeypatch.setattr(
+        "tracecat.agent.preset.activities.AgentPresetService.with_session",
+        lambda **_: _AsyncContext(SimpleNamespace()),
+    )
+
+    with pytest.raises(
+        TracecatValidationError,
+        match="Invalid subagent alias 'Bad Alias'",
+    ):
+        await resolve_agents_config_activity(
+            ResolveAgentsConfigActivityInput(
+                role=role,
+                agents=AgentsConfig.model_validate(
+                    {
+                        "enabled": True,
+                        "subagents": [{"preset": "Bad Alias"}],
+                    }
+                ),
+            )
+        )
+
+
+@pytest.mark.anyio
 async def test_resolve_custom_model_provider_config_activity_returns_base_url(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
