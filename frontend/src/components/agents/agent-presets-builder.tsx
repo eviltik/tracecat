@@ -10,18 +10,21 @@ import {
   Check,
   ChevronsUpDown,
   CopyPlus,
+  Globe,
   Hash,
   History,
   List,
   ListOrdered,
   ListTodo,
   Loader2,
+  type LucideIcon,
   MessageCircle,
   MoreVertical,
   Percent,
   Plus,
   Pyramid,
   Save,
+  ShieldCheck,
   SlidersHorizontal,
   Sparkles,
   ToggleLeft,
@@ -37,15 +40,18 @@ import {
   type UseFormReturn,
   useFieldArray,
   useForm,
+  useWatch,
 } from "react-hook-form"
 import { z } from "zod"
 import type {
   AgentCatalogRead,
   AgentCustomProviderRead,
+  AgentPresetCapability,
   AgentPresetCreate,
   AgentPresetRead,
   AgentPresetReadMinimal,
   AgentPresetUpdate,
+  AgentPresetWarning,
   AttachedSubagentRef,
   SkillReadMinimal,
   SkillVersionRead,
@@ -146,7 +152,6 @@ import { useSkills, useSkillVersions } from "@/hooks/use-skills"
 import {
   type AgentPresetFormMode,
   buildDuplicateAgentPresetPayload,
-  getSubagentPresetUnavailableCode,
   getSubagentPresetUnavailableReason,
   getUnavailableSubagentPresetSlugs,
 } from "@/lib/agent-presets"
@@ -386,8 +391,34 @@ const agentPresetSchema = z
   })
 
 type AgentPresetFormValues = z.infer<typeof agentPresetSchema>
+type SubagentFormValue = AgentPresetFormValues["subagents"][number]
 type SkillBindingFormValue = AgentPresetFormValues["skills"][number]
 type ToolApprovalFormValue = AgentPresetFormValues["toolApprovals"][number]
+
+const LIVE_INTERNET_ACCESS_WARNING_MESSAGE =
+  "One or more selected subagents have internet access enabled, but the parent agent does not. Enable internet access on the parent agent for those subagents to use web tools."
+
+const AGENT_PRESET_CAPABILITY_CONFIG = [
+  {
+    capability: "approvals",
+    label: "Approvals",
+    Icon: ShieldCheck,
+  },
+  {
+    capability: "subagents",
+    label: "Subagents",
+    Icon: Bot,
+  },
+  {
+    capability: "internet_access",
+    label: "Internet access",
+    Icon: Globe,
+  },
+] satisfies Array<{
+  capability: AgentPresetCapability
+  label: string
+  Icon: LucideIcon
+}>
 
 const DEFAULT_FORM_VALUES: AgentPresetFormValues = {
   name: "",
@@ -2388,8 +2419,13 @@ function AgentPresetSubagentsPanel({
   onAddSubagent: () => void
   onRemoveSubagent: (index: number) => void
 }) {
-  const agentsEnabled = form.watch("agentsEnabled")
-  const internetAccessWarning = parentPreset?.warnings?.find(
+  const agentsEnabled =
+    useWatch({ control: form.control, name: "agentsEnabled" }) ?? false
+  const parentInternetAccessEnabled =
+    useWatch({ control: form.control, name: "enableInternetAccess" }) ?? false
+  const selectedSubagents =
+    useWatch({ control: form.control, name: "subagents" }) ?? []
+  const savedInternetAccessWarning = parentPreset?.warnings?.find(
     (warning) => warning.code === "subagent_internet_requires_parent"
   )
   const presetOptions = useMemo(
@@ -2399,6 +2435,20 @@ function AgentPresetSubagentsPanel({
         .sort((a, b) => a.name.localeCompare(b.name)),
     [agentPresets, parentPreset?.id]
   )
+  const selectedInternetAccessSubagentAliases =
+    getSelectedInternetAccessSubagentAliases(selectedSubagents, presetOptions)
+  const currentSubagentAliases = new Set(
+    selectedSubagents
+      .map((subagent) => getSubagentFormAlias(subagent))
+      .filter(Boolean)
+  )
+  const internetAccessWarningMessage = getInternetAccessWarningMessage({
+    agentsEnabled,
+    parentInternetAccessEnabled,
+    selectedInternetAccessSubagentAliases,
+    savedWarning: savedInternetAccessWarning,
+    currentSubagentAliases,
+  })
 
   return (
     <ScrollArea className="h-full">
@@ -2459,12 +2509,12 @@ function AgentPresetSubagentsPanel({
             </Button>
           </div>
 
-          {internetAccessWarning ? (
+          {internetAccessWarningMessage ? (
             <Alert variant="warning">
               <AlertCircle className="size-4" />
               <AlertTitle>Internet access limited</AlertTitle>
               <AlertDescription>
-                {internetAccessWarning.message}
+                {internetAccessWarningMessage}
               </AlertDescription>
             </Alert>
           ) : null}
@@ -2526,12 +2576,12 @@ function AgentPresetSubagentsPanel({
                                   {presetOptions.map((preset) => {
                                     const unavailableReason =
                                       getSubagentPresetUnavailableReason(preset)
-                                    const unavailableCode =
-                                      getSubagentPresetUnavailableCode(preset)
-                                    const unavailableBadge =
-                                      unavailableCode === "agents_enabled"
-                                        ? "Agents"
-                                        : "Approvals"
+                                    const capabilities =
+                                      getOrderedAgentPresetCapabilities(preset)
+                                    const capabilitiesLabel =
+                                      formatAgentPresetCapabilityLabels(
+                                        capabilities
+                                      )
                                     const optionLabel = (
                                       <span className="flex min-w-0 items-center gap-2">
                                         <span className="min-w-0 truncate">
@@ -2540,11 +2590,9 @@ function AgentPresetSubagentsPanel({
                                         <span className="min-w-0 truncate text-xs text-muted-foreground">
                                           {preset.slug}
                                         </span>
-                                        {unavailableReason ? (
-                                          <span className="ml-auto shrink-0 rounded border border-border px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground">
-                                            {unavailableBadge}
-                                          </span>
-                                        ) : null}
+                                        <AgentPresetCapabilityIcons
+                                          capabilities={capabilities}
+                                        />
                                       </span>
                                     )
 
@@ -2564,7 +2612,26 @@ function AgentPresetSubagentsPanel({
                                             side="right"
                                             className="max-w-xs"
                                           >
-                                            {unavailableReason}
+                                            <div className="space-y-2">
+                                              {capabilitiesLabel ? (
+                                                <div className="space-y-0.5">
+                                                  <p className="font-medium">
+                                                    Capabilities
+                                                  </p>
+                                                  <p className="text-muted-foreground">
+                                                    {capabilitiesLabel}
+                                                  </p>
+                                                </div>
+                                              ) : null}
+                                              <div className="space-y-0.5">
+                                                <p className="font-medium">
+                                                  Cannot attach
+                                                </p>
+                                                <p className="text-muted-foreground">
+                                                  {unavailableReason}
+                                                </p>
+                                              </div>
+                                            </div>
                                           </TooltipContent>
                                         </Tooltip>
                                       )
@@ -3557,6 +3624,117 @@ function normalizeOptional(value: string | null | undefined) {
   }
   const trimmed = value.trim()
   return trimmed.length > 0 ? trimmed : null
+}
+
+function getSubagentFormAlias(subagent: SubagentFormValue): string {
+  return subagent.name.trim() || subagent.preset.trim()
+}
+
+function getOrderedAgentPresetCapabilities(
+  preset: AgentPresetReadMinimal
+): AgentPresetCapability[] {
+  const capabilities = new Set(preset.capabilities ?? [])
+  return AGENT_PRESET_CAPABILITY_CONFIG.filter(({ capability }) =>
+    capabilities.has(capability)
+  ).map(({ capability }) => capability)
+}
+
+function hasAgentPresetCapability(
+  preset: AgentPresetReadMinimal,
+  capability: AgentPresetCapability
+): boolean {
+  return preset.capabilities?.includes(capability) ?? false
+}
+
+function getAgentPresetCapabilityConfigs(
+  capabilities: AgentPresetCapability[]
+) {
+  const capabilitySet = new Set(capabilities)
+  return AGENT_PRESET_CAPABILITY_CONFIG.filter(({ capability }) =>
+    capabilitySet.has(capability)
+  )
+}
+
+function formatAgentPresetCapabilityLabels(
+  capabilities: AgentPresetCapability[]
+): string {
+  return getAgentPresetCapabilityConfigs(capabilities)
+    .map(({ label }) => label)
+    .join(", ")
+}
+
+function AgentPresetCapabilityIcons({
+  capabilities,
+}: {
+  capabilities: AgentPresetCapability[]
+}) {
+  const configs = getAgentPresetCapabilityConfigs(capabilities)
+  if (configs.length === 0) {
+    return null
+  }
+  const label = formatAgentPresetCapabilityLabels(capabilities)
+
+  return (
+    <span
+      className="ml-auto flex shrink-0 items-center gap-1 text-muted-foreground"
+      aria-label={label}
+      title={label}
+    >
+      {configs.map(({ capability, Icon }) => (
+        <Icon key={capability} className="size-3.5" aria-hidden="true" />
+      ))}
+    </span>
+  )
+}
+
+function getSelectedInternetAccessSubagentAliases(
+  subagents: SubagentFormValue[],
+  presets: AgentPresetReadMinimal[]
+): string[] {
+  const presetsBySlug = new Map(presets.map((preset) => [preset.slug, preset]))
+  const aliases: string[] = []
+
+  for (const subagent of subagents) {
+    const presetSlug = subagent.preset.trim()
+    if (!presetSlug) {
+      continue
+    }
+    const preset = presetsBySlug.get(presetSlug)
+    if (preset && hasAgentPresetCapability(preset, "internet_access")) {
+      aliases.push(getSubagentFormAlias(subagent))
+    }
+  }
+
+  return aliases
+}
+
+function getInternetAccessWarningMessage({
+  agentsEnabled,
+  parentInternetAccessEnabled,
+  selectedInternetAccessSubagentAliases,
+  savedWarning,
+  currentSubagentAliases,
+}: {
+  agentsEnabled: boolean
+  parentInternetAccessEnabled: boolean
+  selectedInternetAccessSubagentAliases: string[]
+  savedWarning: AgentPresetWarning | undefined
+  currentSubagentAliases: Set<string>
+}): string | null {
+  if (!agentsEnabled || parentInternetAccessEnabled) {
+    return null
+  }
+  if (selectedInternetAccessSubagentAliases.length > 0) {
+    return LIVE_INTERNET_ACCESS_WARNING_MESSAGE
+  }
+  const savedAliases = savedWarning?.subagent_aliases ?? []
+  const savedWarningApplies = savedAliases.some((alias) =>
+    currentSubagentAliases.has(alias)
+  )
+  if (savedWarningApplies) {
+    return savedWarning?.message ?? LIVE_INTERNET_ACCESS_WARNING_MESSAGE
+  }
+  return null
 }
 
 function parseOptionalPositiveInteger(value: string | null | undefined) {

@@ -18,6 +18,9 @@ if TYPE_CHECKING:
     from tracecat.db.models import AgentPreset
 
 
+type AgentPresetCapability = Literal["approvals", "subagents", "internet_access"]
+
+
 class AgentPresetSkillBindingBase(Schema):
     """Shared fields for preset skill bindings."""
 
@@ -145,7 +148,7 @@ class AgentPresetReadMinimal(Schema):
     slug: str
     description: str | None
     current_version_id: uuid.UUID | None = None
-    has_tool_approvals: bool = Field(default=False)
+    capabilities: list[AgentPresetCapability] = Field(default_factory=list)
     subagent_unavailable_code: Literal["agents_enabled", "tool_approvals"] | None = None
     subagent_unavailable_reason: str | None = None
     created_at: datetime
@@ -173,11 +176,34 @@ def build_agent_preset_read_minimal(
     )
     return read.model_copy(
         update={
-            "has_tool_approvals": has_manual_tool_approvals(tool_approvals),
+            "capabilities": _agent_preset_capabilities(
+                agents_config=agents_config,
+                tool_approvals=tool_approvals,
+                enable_internet_access=bool(preset.enable_internet_access),
+            ),
             "subagent_unavailable_code": subagent_unavailable[0],
             "subagent_unavailable_reason": subagent_unavailable[1],
         }
     )
+
+
+def _agent_preset_capabilities(
+    *,
+    agents_config: AgentsConfig | Mapping[str, object] | None,
+    tool_approvals: Mapping[str, bool] | None,
+    enable_internet_access: bool,
+) -> list[AgentPresetCapability]:
+    """Return lightweight capability flags for preset list UIs."""
+
+    capabilities: list[AgentPresetCapability] = []
+    agents = AgentsConfig.model_validate(agents_config or {})
+    if has_manual_tool_approvals(tool_approvals):
+        capabilities.append("approvals")
+    if agents.enabled:
+        capabilities.append("subagents")
+    if enable_internet_access:
+        capabilities.append("internet_access")
+    return capabilities
 
 
 def _subagent_unavailable_metadata(

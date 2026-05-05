@@ -1830,6 +1830,11 @@ export const $AgentPreset = {
   title: "AgentPreset",
 } as const
 
+export const $AgentPresetCapability = {
+  type: "string",
+  enum: ["approvals", "subagents", "internet_access"],
+} as const
+
 export const $AgentPresetCreate = {
   properties: {
     instructions: {
@@ -2273,10 +2278,12 @@ export const $AgentPresetReadMinimal = {
       ],
       title: "Current Version Id",
     },
-    has_tool_approvals: {
-      type: "boolean",
-      title: "Has Tool Approvals",
-      default: false,
+    capabilities: {
+      items: {
+        $ref: "#/components/schemas/AgentPresetCapability",
+      },
+      type: "array",
+      title: "Capabilities",
     },
     subagent_unavailable_code: {
       anyOf: [

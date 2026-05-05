@@ -26,6 +26,7 @@ def make_agent_preset(
     slug: str = "preset",
     tool_approvals: dict[str, bool] | None = None,
     agents: dict[str, object] | None = None,
+    enable_internet_access: bool = False,
 ) -> AgentPreset:
     timestamp = datetime(2026, 3, 9, tzinfo=UTC)
     return AgentPreset(
@@ -37,6 +38,7 @@ def make_agent_preset(
         current_version_id=None,
         tool_approvals=tool_approvals,
         agents=agents or {"enabled": False},
+        enable_internet_access=enable_internet_access,
         created_at=timestamp,
         updated_at=timestamp,
     )
@@ -134,7 +136,7 @@ def test_agent_preset_read_schema_accepts_legacy_whitespace_model_fields() -> No
     assert payload.warnings == []
 
 
-def test_agent_preset_read_minimal_exposes_approval_boolean_only() -> None:
+def test_agent_preset_read_minimal_exposes_capabilities() -> None:
     payload = build_agent_preset_read_minimal(
         make_agent_preset(
             name="Approval preset",
@@ -143,11 +145,12 @@ def test_agent_preset_read_minimal_exposes_approval_boolean_only() -> None:
                 "core.http_request": False,
                 "core.cases.create_case": True,
             },
+            enable_internet_access=True,
         )
     )
 
     dumped = payload.model_dump(mode="json")
-    assert dumped["has_tool_approvals"] is True
+    assert dumped["capabilities"] == ["approvals", "internet_access"]
     assert dumped["subagent_unavailable_code"] == "tool_approvals"
     assert dumped["subagent_unavailable_reason"] is not None
     assert "tool_approvals" not in dumped
@@ -166,7 +169,7 @@ def test_agent_preset_read_minimal_exposes_agents_subagent_unavailable_reason() 
     dumped = payload.model_dump(mode="json")
     assert dumped["subagent_unavailable_code"] == "agents_enabled"
     assert dumped["subagent_unavailable_reason"] is not None
-    assert dumped["has_tool_approvals"] is True
+    assert dumped["capabilities"] == ["approvals", "subagents"]
     assert "agents" not in dumped
 
 

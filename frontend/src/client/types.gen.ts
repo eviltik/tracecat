@@ -484,6 +484,11 @@ export type AgentPreset = {
   component_id?: "agent-preset"
 }
 
+export type AgentPresetCapability =
+  | "approvals"
+  | "subagents"
+  | "internet_access"
+
 /**
  * Payload for creating a new agent preset.
  */
@@ -552,7 +557,7 @@ export type AgentPresetReadMinimal = {
   slug: string
   description: string | null
   current_version_id?: string | null
-  has_tool_approvals?: boolean
+  capabilities?: Array<AgentPresetCapability>
   subagent_unavailable_code?: "agents_enabled" | "tool_approvals" | null
   subagent_unavailable_reason?: string | null
   created_at: string
