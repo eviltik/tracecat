@@ -2760,6 +2760,30 @@ export type CursorPaginatedResponse_AgentPresetVersionReadMinimal_ = {
   total_estimate?: number | null
 }
 
+export type CursorPaginatedResponse_AgentTagRead_ = {
+  items: Array<AgentTagRead>
+  /**
+   * Cursor for next page
+   */
+  next_cursor?: string | null
+  /**
+   * Cursor for previous page
+   */
+  prev_cursor?: string | null
+  /**
+   * Whether more items exist
+   */
+  has_more?: boolean
+  /**
+   * Whether previous items exist
+   */
+  has_previous?: boolean
+  /**
+   * Estimated total count from table statistics
+   */
+  total_estimate?: number | null
+}
+
 export type CursorPaginatedResponse_CaseReadMinimal_ = {
   items: Array<CaseReadMinimal>
   /**
@@ -10336,10 +10360,14 @@ export type AgentFoldersMoveFolderData = {
 export type AgentFoldersMoveFolderResponse = AgentFolderRead
 
 export type AgentTagsListAgentTagsData = {
+  cursor?: string | null
+  limit?: number
+  reverse?: boolean
   workspaceId: string
 }
 
-export type AgentTagsListAgentTagsResponse = Array<AgentTagRead>
+export type AgentTagsListAgentTagsResponse =
+  CursorPaginatedResponse_AgentTagRead_
 
 export type AgentTagsCreateAgentTagData = {
   requestBody: TagCreate
@@ -15167,7 +15195,7 @@ export type $OpenApiTs = {
         /**
          * Successful Response
          */
-        200: Array<AgentTagRead>
+        200: CursorPaginatedResponse_AgentTagRead_
         /**
          * Validation Error
          */
