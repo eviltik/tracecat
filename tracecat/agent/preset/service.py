@@ -509,6 +509,7 @@ class AgentPresetService(BaseWorkspaceService):
     @requires_entitlement(Entitlement.AGENT_ADDONS)
     async def delete_preset(self, preset: AgentPreset) -> None:
         """Delete a preset."""
+        await self._ensure_not_referenced_as_subagent(preset)
         # Break the mutable-head pointer before deleting version rows to avoid an ORM
         # dependency cycle between AgentPreset.current_version_id and its versions.
         preset.current_version_id = None
@@ -516,6 +517,50 @@ class AgentPresetService(BaseWorkspaceService):
         await self.session.flush()
         await self.session.delete(preset)
         await self.session.commit()
+
+    async def _ensure_not_referenced_as_subagent(self, preset: AgentPreset) -> None:
+        """Block deletion while other presets still reference this preset."""
+        subagent_ref = {"subagents": [{"preset_id": str(preset.id)}]}
+        legacy_slug_ref = {"subagents": [{"preset": preset.slug}]}
+        head_reference_stmt = (
+            select(func.count())
+            .select_from(AgentPreset)
+            .where(
+                AgentPreset.workspace_id == self.workspace_id,
+                AgentPreset.id != preset.id,
+                sa.or_(
+                    AgentPreset.agents.contains(subagent_ref),
+                    AgentPreset.agents.contains(legacy_slug_ref),
+                ),
+            )
+        )
+        history_reference_stmt = (
+            select(func.count())
+            .select_from(AgentPresetVersion)
+            .where(
+                AgentPresetVersion.workspace_id == self.workspace_id,
+                AgentPresetVersion.preset_id != preset.id,
+                sa.or_(
+                    AgentPresetVersion.agents.contains(subagent_ref),
+                    AgentPresetVersion.agents.contains(legacy_slug_ref),
+                ),
+            )
+        )
+        head_reference_count = int(
+            (await self.session.execute(head_reference_stmt)).scalar_one() or 0
+        )
+        history_reference_count = int(
+            (await self.session.execute(history_reference_stmt)).scalar_one() or 0
+        )
+        if head_reference_count > 0 or history_reference_count > 0:
+            raise TracecatValidationError(
+                "Cannot delete an agent preset that is still referenced as a subagent",
+                detail={
+                    "code": "preset_in_use_as_subagent",
+                    "head_reference_count": head_reference_count,
+                    "history_reference_count": history_reference_count,
+                },
+            )
 
     @requires_entitlement(Entitlement.AGENT_ADDONS)
     async def resolve_agent_preset_config(
