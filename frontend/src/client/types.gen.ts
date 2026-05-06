@@ -10345,7 +10345,7 @@ export type AgentFoldersUpdateFolderResponse = AgentFolderRead
 
 export type AgentFoldersDeleteFolderData = {
   folderId: string
-  requestBody: AgentFolderDelete
+  requestBody?: AgentFolderDelete | null
   workspaceId: string
 }
 
