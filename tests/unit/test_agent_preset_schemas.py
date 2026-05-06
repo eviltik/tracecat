@@ -16,6 +16,7 @@ from tracecat.agent.preset.schemas import (
     AgentPresetUpdate,
     AgentPresetVersionReadMinimal,
     build_agent_preset_read_minimal,
+    build_subagent_eligibility,
 )
 from tracecat.db.models import AgentPreset
 
@@ -151,12 +152,20 @@ def test_agent_preset_read_minimal_exposes_capabilities() -> None:
 
     dumped = payload.model_dump(mode="json")
     assert dumped["capabilities"] == ["approvals", "internet_access"]
-    assert dumped["subagent_unavailable_code"] == "tool_approvals"
-    assert dumped["subagent_unavailable_reason"] is not None
+    assert dumped["current_version_subagent_eligibility"] == {
+        "eligible": False,
+        "reasons": ["tool_approvals"],
+        "message": (
+            "This version requires manual approvals, which are not supported for "
+            "preset subagents yet."
+        ),
+    }
     assert "tool_approvals" not in dumped
 
 
-def test_agent_preset_read_minimal_exposes_agents_subagent_unavailable_reason() -> None:
+def test_agent_preset_read_minimal_exposes_current_version_subagent_eligibility() -> (
+    None
+):
     payload = build_agent_preset_read_minimal(
         make_agent_preset(
             name="Parent preset",
@@ -167,10 +176,27 @@ def test_agent_preset_read_minimal_exposes_agents_subagent_unavailable_reason() 
     )
 
     dumped = payload.model_dump(mode="json")
-    assert dumped["subagent_unavailable_code"] == "agents_enabled"
-    assert dumped["subagent_unavailable_reason"] is not None
+    assert dumped["current_version_subagent_eligibility"] == {
+        "eligible": False,
+        "reasons": ["agents_enabled", "tool_approvals"],
+        "message": (
+            "This version defines its own subagents and requires manual approvals, "
+            "which are not supported for preset subagents yet."
+        ),
+    }
     assert dumped["capabilities"] == ["approvals", "subagents"]
     assert "agents" not in dumped
+
+
+def test_build_subagent_eligibility_allows_plain_versions() -> None:
+    eligibility = build_subagent_eligibility(
+        agents_config={"enabled": False},
+        tool_approvals={"core.http_request": False},
+    )
+
+    assert eligibility.eligible is True
+    assert eligibility.reasons == []
+    assert eligibility.message is None
 
 
 def test_agent_preset_version_read_schema_accepts_legacy_whitespace_model_fields() -> (

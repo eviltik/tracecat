@@ -2285,28 +2285,8 @@ export const $AgentPresetReadMinimal = {
       type: "array",
       title: "Capabilities",
     },
-    subagent_unavailable_code: {
-      anyOf: [
-        {
-          type: "string",
-          enum: ["agents_enabled", "tool_approvals"],
-        },
-        {
-          type: "null",
-        },
-      ],
-      title: "Subagent Unavailable Code",
-    },
-    subagent_unavailable_reason: {
-      anyOf: [
-        {
-          type: "string",
-        },
-        {
-          type: "null",
-        },
-      ],
-      title: "Subagent Unavailable Reason",
+    current_version_subagent_eligibility: {
+      $ref: "#/components/schemas/AgentPresetSubagentEligibility",
     },
     created_at: {
       type: "string",
@@ -2441,6 +2421,43 @@ export const $AgentPresetSkillBindingRead = {
   required: ["skill_id", "skill_version_id", "skill_name", "skill_version"],
   title: "AgentPresetSkillBindingRead",
   description: "Resolved preset skill binding with metadata.",
+} as const
+
+export const $AgentPresetSubagentEligibility = {
+  properties: {
+    eligible: {
+      type: "boolean",
+      title: "Eligible",
+      default: true,
+    },
+    reasons: {
+      items: {
+        $ref: "#/components/schemas/AgentPresetSubagentEligibilityReason",
+      },
+      type: "array",
+      title: "Reasons",
+    },
+    message: {
+      anyOf: [
+        {
+          type: "string",
+        },
+        {
+          type: "null",
+        },
+      ],
+      title: "Message",
+    },
+  },
+  type: "object",
+  title: "AgentPresetSubagentEligibility",
+  description:
+    "Whether a preset version can be attached as a preset-backed subagent.",
+} as const
+
+export const $AgentPresetSubagentEligibilityReason = {
+  type: "string",
+  enum: ["agents_enabled", "tool_approvals"],
 } as const
 
 export const $AgentPresetUpdate = {
@@ -2917,6 +2934,16 @@ export const $AgentPresetVersionRead = {
       type: "integer",
       title: "Version",
     },
+    capabilities: {
+      items: {
+        $ref: "#/components/schemas/AgentPresetCapability",
+      },
+      type: "array",
+      title: "Capabilities",
+    },
+    subagent_eligibility: {
+      $ref: "#/components/schemas/AgentPresetSubagentEligibility",
+    },
     skills: {
       items: {
         $ref: "#/components/schemas/AgentPresetSkillBindingRead",
@@ -2977,6 +3004,16 @@ export const $AgentPresetVersionReadMinimal = {
     version: {
       type: "integer",
       title: "Version",
+    },
+    capabilities: {
+      items: {
+        $ref: "#/components/schemas/AgentPresetCapability",
+      },
+      type: "array",
+      title: "Capabilities",
+    },
+    subagent_eligibility: {
+      $ref: "#/components/schemas/AgentPresetSubagentEligibility",
     },
     created_at: {
       type: "string",

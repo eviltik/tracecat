@@ -19,6 +19,15 @@ if TYPE_CHECKING:
 
 
 type AgentPresetCapability = Literal["approvals", "subagents", "internet_access"]
+type AgentPresetSubagentEligibilityReason = Literal["agents_enabled", "tool_approvals"]
+
+
+class AgentPresetSubagentEligibility(BaseModel):
+    """Whether a preset version can be attached as a preset-backed subagent."""
+
+    eligible: bool = True
+    reasons: list[AgentPresetSubagentEligibilityReason] = Field(default_factory=list)
+    message: str | None = None
 
 
 class AgentPresetSkillBindingBase(Schema):
@@ -149,8 +158,9 @@ class AgentPresetReadMinimal(Schema):
     description: str | None
     current_version_id: uuid.UUID | None = None
     capabilities: list[AgentPresetCapability] = Field(default_factory=list)
-    subagent_unavailable_code: Literal["agents_enabled", "tool_approvals"] | None = None
-    subagent_unavailable_reason: str | None = None
+    current_version_subagent_eligibility: AgentPresetSubagentEligibility = Field(
+        default_factory=AgentPresetSubagentEligibility
+    )
     created_at: datetime
     updated_at: datetime
 
@@ -172,10 +182,6 @@ def build_agent_preset_read_minimal(
         AgentSubagentsConfig | Mapping[str, object] | None, preset.agents
     )
     tool_approvals = cast(Mapping[str, bool] | None, preset.tool_approvals)
-    subagent_unavailable = _subagent_unavailable_metadata(
-        agents_config=agents_config,
-        tool_approvals=tool_approvals,
-    )
     return read.model_copy(
         update={
             "capabilities": _agent_preset_capabilities(
@@ -183,8 +189,10 @@ def build_agent_preset_read_minimal(
                 tool_approvals=tool_approvals,
                 enable_internet_access=bool(preset.enable_internet_access),
             ),
-            "subagent_unavailable_code": subagent_unavailable[0],
-            "subagent_unavailable_reason": subagent_unavailable[1],
+            "current_version_subagent_eligibility": build_subagent_eligibility(
+                agents_config=agents_config,
+                tool_approvals=tool_approvals,
+            ),
         }
     )
 
@@ -208,25 +216,46 @@ def _agent_preset_capabilities(
     return capabilities
 
 
-def _subagent_unavailable_metadata(
+def build_subagent_eligibility(
     *,
     agents_config: AgentSubagentsConfig | Mapping[str, object] | None,
     tool_approvals: Mapping[str, bool] | None,
-) -> tuple[Literal["agents_enabled", "tool_approvals"] | None, str | None]:
-    """Return why this preset cannot be attached as a preset-backed subagent."""
+) -> AgentPresetSubagentEligibility:
+    """Return whether this preset version can be attached as a subagent."""
 
+    reasons: list[AgentPresetSubagentEligibilityReason] = []
     agents = AgentSubagentsConfig.model_validate(agents_config or {})
     if agents.enabled:
-        return (
-            "agents_enabled",
-            "Subagents cannot define their own agents yet. Disable the Agent tool on this preset before attaching it as a subagent.",
-        )
+        reasons.append("agents_enabled")
     if has_manual_tool_approvals(tool_approvals):
+        reasons.append("tool_approvals")
+    return AgentPresetSubagentEligibility(
+        eligible=not reasons,
+        reasons=reasons,
+        message=_subagent_eligibility_message(reasons),
+    )
+
+
+def _subagent_eligibility_message(
+    reasons: list[AgentPresetSubagentEligibilityReason],
+) -> str | None:
+    if not reasons:
+        return None
+    reason_set = set(reasons)
+    if reason_set == {"agents_enabled"}:
         return (
-            "tool_approvals",
-            "Subagents with manual approvals are not supported yet. Remove approval requirements from this preset before attaching it as a subagent.",
+            "This version defines its own subagents. Disable the Agent tool on "
+            "that version before attaching it as a subagent."
         )
-    return None, None
+    if reason_set == {"tool_approvals"}:
+        return (
+            "This version requires manual approvals, which are not supported for "
+            "preset subagents yet."
+        )
+    return (
+        "This version defines its own subagents and requires manual approvals, "
+        "which are not supported for preset subagents yet."
+    )
 
 
 class AgentPresetRead(AgentPresetExecutionConfig):
@@ -282,6 +311,10 @@ class AgentPresetVersionReadMinimal(Schema):
     preset_id: uuid.UUID
     workspace_id: WorkspaceID
     version: int
+    capabilities: list[AgentPresetCapability] = Field(default_factory=list)
+    subagent_eligibility: AgentPresetSubagentEligibility = Field(
+        default_factory=AgentPresetSubagentEligibility
+    )
     created_at: datetime
     updated_at: datetime
 
@@ -295,6 +328,10 @@ class AgentPresetVersionRead(AgentPresetExecutionConfig):
     preset_id: uuid.UUID
     workspace_id: WorkspaceID
     version: int
+    capabilities: list[AgentPresetCapability] = Field(default_factory=list)
+    subagent_eligibility: AgentPresetSubagentEligibility = Field(
+        default_factory=AgentPresetSubagentEligibility
+    )
     skills: list[AgentPresetSkillBindingRead] = Field(default_factory=list)
     warnings: list[AgentPresetWarning] = Field(default_factory=list)
     created_at: datetime

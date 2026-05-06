@@ -29,6 +29,8 @@ from tracecat.agent.preset.schemas import (
     ScalarFieldChange,
     StringListFieldChange,
     ToolApprovalFieldChange,
+    _agent_preset_capabilities,
+    build_subagent_eligibility,
 )
 from tracecat.agent.preset.types import SkillBindingSpec
 from tracecat.agent.skill.service import SkillService
@@ -235,6 +237,15 @@ class AgentPresetService(BaseWorkspaceService):
             retries=version.retries,
             enable_thinking=version.enable_thinking,
             enable_internet_access=version.enable_internet_access,
+            capabilities=_agent_preset_capabilities(
+                agents_config=agents,
+                tool_approvals=version.tool_approvals,
+                enable_internet_access=version.enable_internet_access,
+            ),
+            subagent_eligibility=build_subagent_eligibility(
+                agents_config=agents,
+                tool_approvals=version.tool_approvals,
+            ),
             created_at=version.created_at,
             updated_at=version.updated_at,
             skills=await self._list_version_skill_bindings(version.id),
@@ -1118,6 +1129,9 @@ class AgentPresetService(BaseWorkspaceService):
             AgentPresetVersion.preset_id,
             AgentPresetVersion.workspace_id,
             AgentPresetVersion.version,
+            AgentPresetVersion.agents,
+            AgentPresetVersion.tool_approvals,
+            AgentPresetVersion.enable_internet_access,
             AgentPresetVersion.created_at,
             AgentPresetVersion.updated_at,
         ).where(
@@ -1172,6 +1186,15 @@ class AgentPresetService(BaseWorkspaceService):
                 preset_id=row_preset_id,
                 workspace_id=workspace_id,
                 version=version_number,
+                capabilities=_agent_preset_capabilities(
+                    agents_config=agents,
+                    tool_approvals=tool_approvals,
+                    enable_internet_access=enable_internet_access,
+                ),
+                subagent_eligibility=build_subagent_eligibility(
+                    agents_config=agents,
+                    tool_approvals=tool_approvals,
+                ),
                 created_at=created_at,
                 updated_at=updated_at,
             )
@@ -1180,6 +1203,9 @@ class AgentPresetService(BaseWorkspaceService):
                 row_preset_id,
                 workspace_id,
                 version_number,
+                agents,
+                tool_approvals,
+                enable_internet_access,
                 created_at,
                 updated_at,
             ) in result.tuples().all()

@@ -558,8 +558,7 @@ export type AgentPresetReadMinimal = {
   description: string | null
   current_version_id?: string | null
   capabilities?: Array<AgentPresetCapability>
-  subagent_unavailable_code?: "agents_enabled" | "tool_approvals" | null
-  subagent_unavailable_reason?: string | null
+  current_version_subagent_eligibility?: AgentPresetSubagentEligibility
   created_at: string
   updated_at: string
 }
@@ -593,6 +592,19 @@ export type AgentPresetSkillBindingRead = {
   skill_name: string
   skill_version: number
 }
+
+/**
+ * Whether a preset version can be attached as a preset-backed subagent.
+ */
+export type AgentPresetSubagentEligibility = {
+  eligible?: boolean
+  reasons?: Array<AgentPresetSubagentEligibilityReason>
+  message?: string | null
+}
+
+export type AgentPresetSubagentEligibilityReason =
+  | "agents_enabled"
+  | "tool_approvals"
 
 /**
  * Payload for updating an existing agent preset.
@@ -662,6 +674,8 @@ export type AgentPresetVersionRead = {
   preset_id: string
   workspace_id: string
   version: number
+  capabilities?: Array<AgentPresetCapability>
+  subagent_eligibility?: AgentPresetSubagentEligibility
   skills?: Array<AgentPresetSkillBindingRead>
   warnings?: Array<AgentPresetWarning>
   created_at: string
@@ -676,6 +690,8 @@ export type AgentPresetVersionReadMinimal = {
   preset_id: string
   workspace_id: string
   version: number
+  capabilities?: Array<AgentPresetCapability>
+  subagent_eligibility?: AgentPresetSubagentEligibility
   created_at: string
   updated_at: string
 }

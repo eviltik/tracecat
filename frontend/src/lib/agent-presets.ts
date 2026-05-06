@@ -1,31 +1,7 @@
-import type {
-  AgentPresetCreate,
-  AgentPresetRead,
-  AgentPresetReadMinimal,
-} from "@/client"
+import type { AgentPresetCreate, AgentPresetRead } from "@/client"
 import { slugify } from "@/lib/utils"
 
 export type AgentPresetFormMode = "create" | "edit"
-
-export function getSubagentPresetUnavailableReason(
-  preset: Pick<AgentPresetReadMinimal, "subagent_unavailable_reason">
-): string | null {
-  return preset.subagent_unavailable_reason ?? null
-}
-
-export function getUnavailableSubagentPresetSlugs(
-  presets: Pick<AgentPresetReadMinimal, "slug" | "subagent_unavailable_code">[]
-): Set<string> {
-  return new Set(
-    presets
-      .filter(
-        (preset) =>
-          preset.subagent_unavailable_code !== null &&
-          preset.subagent_unavailable_code !== undefined
-      )
-      .map((preset) => preset.slug)
-  )
-}
 
 export function getDuplicateItemName(name: string, fallback: string): string {
   const trimmedName = name.trim()

@@ -777,6 +777,34 @@ class TestAgentPresetService:
         assert [version.version for version in page_2.items] == [1]
         assert page_2.has_more is False
 
+    async def test_list_versions_exposes_subagent_eligibility(
+        self,
+        agent_preset_service: AgentPresetService,
+        agent_preset_create_params: AgentPresetCreate,
+    ) -> None:
+        """Version list metadata includes version-specific subagent eligibility."""
+        created_preset = await agent_preset_service.create_preset(
+            agent_preset_create_params.model_copy(
+                update={
+                    "agents": AgentSubagentsConfig.model_validate(
+                        {"enabled": True, "subagents": []}
+                    )
+                }
+            )
+        )
+
+        versions = await agent_preset_service.list_versions(
+            created_preset.id,
+            CursorPaginationParams(limit=10),
+        )
+
+        assert len(versions.items) == 1
+        version = versions.items[0]
+        assert version.capabilities == ["subagents"]
+        assert version.subagent_eligibility.eligible is False
+        assert version.subagent_eligibility.reasons == ["agents_enabled"]
+        assert version.subagent_eligibility.message is not None
+
     async def test_list_versions_rejects_invalid_cursor(
         self,
         agent_preset_service: AgentPresetService,
