@@ -13,18 +13,16 @@ export function getSubagentPresetUnavailableReason(
   return preset.subagent_unavailable_reason ?? null
 }
 
-export function getSubagentPresetUnavailableCode(
-  preset: Pick<AgentPresetReadMinimal, "subagent_unavailable_code">
-): AgentPresetReadMinimal["subagent_unavailable_code"] | null {
-  return preset.subagent_unavailable_code ?? null
-}
-
 export function getUnavailableSubagentPresetSlugs(
   presets: Pick<AgentPresetReadMinimal, "slug" | "subagent_unavailable_code">[]
 ): Set<string> {
   return new Set(
     presets
-      .filter((preset) => getSubagentPresetUnavailableCode(preset) !== null)
+      .filter(
+        (preset) =>
+          preset.subagent_unavailable_code !== null &&
+          preset.subagent_unavailable_code !== undefined
+      )
       .map((preset) => preset.slug)
   )
 }
@@ -71,7 +69,7 @@ export function buildDuplicateAgentPresetPayload(
     namespaces: preset.namespaces ?? null,
     tool_approvals: preset.tool_approvals ?? null,
     mcp_integrations: preset.mcp_integrations ?? null,
-    agents: preset.agents as AgentPresetCreate["agents"],
+    agents: preset.agents,
     retries: preset.retries,
     enable_thinking: preset.enable_thinking,
     enable_internet_access: preset.enable_internet_access,

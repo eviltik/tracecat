@@ -2,7 +2,6 @@ import {
   buildDuplicateAgentPresetPayload,
   buildDuplicateAgentSlug,
   canSubmitAgentPresetForm,
-  getSubagentPresetUnavailableCode,
   getSubagentPresetUnavailableReason,
   getUnavailableSubagentPresetSlugs,
 } from "@/lib/agent-presets"
@@ -120,7 +119,6 @@ describe("canSubmitAgentPresetForm", () => {
     expect(getSubagentPresetUnavailableReason(preset)).toBe(
       "Approvals are unavailable for subagents."
     )
-    expect(getSubagentPresetUnavailableCode(preset)).toBe("tool_approvals")
     expect(getSubagentPresetUnavailableReason(availablePreset)).toBeNull()
     expect(
       getUnavailableSubagentPresetSlugs([preset, availablePreset])
@@ -138,7 +136,6 @@ describe("canSubmitAgentPresetForm", () => {
     expect(getSubagentPresetUnavailableReason(preset)).toBe(
       "Agents are unavailable for subagents."
     )
-    expect(getSubagentPresetUnavailableCode(preset)).toBe("agents_enabled")
     expect(getUnavailableSubagentPresetSlugs([preset])).toEqual(
       new Set(["nested-child"])
     )
