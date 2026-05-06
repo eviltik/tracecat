@@ -482,6 +482,8 @@ class ApprovalManager:
         }
         self._approved_by = None
 
+        # Preserve per-tool proxy metadata on approval rows for display and
+        # decision reconciliation.
         approval_payloads = [
             ToolApprovalPayload(
                 tool_call_id=approval.tool_call_id,
