@@ -27,7 +27,7 @@ from tracecat.agent.skill.schemas import (
     SkillDraftUpsertTextFileOp,
 )
 from tracecat.agent.skill.service import SkillService
-from tracecat.agent.subagents import AgentsConfig
+from tracecat.agent.subagents import AgentSubagentsConfig
 from tracecat.agent.types import AgentConfig
 from tracecat.auth.types import Role
 from tracecat.db.models import (
@@ -2241,7 +2241,7 @@ class TestAgentPresetService:
             update={
                 "name": "Parent Agent",
                 "slug": "parent-agent",
-                "agents": AgentsConfig.model_validate(
+                "agents": AgentSubagentsConfig.model_validate(
                     {
                         "enabled": True,
                         "subagents": [{"preset": child.slug}],
@@ -2291,7 +2291,7 @@ class TestAgentPresetService:
             await agent_preset_service.update_preset(
                 parent,
                 AgentPresetUpdate(
-                    agents=AgentsConfig.model_validate(
+                    agents=AgentSubagentsConfig.model_validate(
                         {
                             "enabled": True,
                             "subagents": [{"preset": child.slug}],
@@ -2322,7 +2322,7 @@ class TestAgentPresetService:
                     "name": "Parent Agent",
                     "slug": "parent-agent",
                     "enable_internet_access": False,
-                    "agents": AgentsConfig.model_validate(
+                    "agents": AgentSubagentsConfig.model_validate(
                         {
                             "enabled": True,
                             "subagents": [
@@ -2367,7 +2367,7 @@ class TestAgentPresetService:
                     "name": "Parent Agent",
                     "slug": "parent-agent",
                     "enable_internet_access": True,
-                    "agents": AgentsConfig.model_validate(
+                    "agents": AgentSubagentsConfig.model_validate(
                         {
                             "enabled": True,
                             "subagents": [{"preset": child.slug}],

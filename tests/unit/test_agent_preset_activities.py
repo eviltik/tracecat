@@ -12,13 +12,13 @@ from tracecat.agent.preset.activities import (
     ResolveAgentPresetVersionRefActivityInput,
     ResolveAgentsConfigActivityInput,
     ResolveAgentsConfigActivityResult,
-    ResolvedSubagentConfig,
     resolve_agent_preset_version_ref_activity,
     resolve_agents_config_activity,
     resolve_custom_model_provider_config_activity,
 )
+from tracecat.agent.preset.resolver import ResolvedSubagentConfig
 from tracecat.agent.preset.service import AgentPresetService
-from tracecat.agent.subagents import AgentsConfig, ResolvedAttachedSubagentRef
+from tracecat.agent.subagents import AgentSubagentsConfig, ResolvedAttachedSubagentRef
 from tracecat.agent.types import AgentConfig
 from tracecat.agent.workflow_schemas import AgentConfigPayload
 from tracecat.auth.types import Role
@@ -116,7 +116,7 @@ def test_resolve_agents_config_result_derives_session_binding() -> None:
 
 
 @pytest.mark.anyio
-async def test_normalize_agents_for_preset_resolves_pinned_ref_by_version_id() -> None:
+async def test_resolve_preset_subagent_configs_resolves_version_id_ref() -> None:
     role = Role(
         type="service",
         service_id="tracecat-api",
@@ -135,8 +135,8 @@ async def test_normalize_agents_for_preset_resolves_pinned_ref_by_version_id() -
     )
     service.resolve_agent_preset_version = AsyncMock(return_value=version)
 
-    result = await service._normalize_agents_for_preset(
-        AgentsConfig(
+    result = await service._resolve_preset_subagent_configs(
+        AgentSubagentsConfig(
             enabled=True,
             subagents=[
                 ResolvedAttachedSubagentRef(
@@ -200,7 +200,7 @@ async def test_resolve_agents_config_resolves_pinned_ref_by_version_id(
     result = await resolve_agents_config_activity(
         ResolveAgentsConfigActivityInput(
             role=role,
-            agents=AgentsConfig(
+            agents=AgentSubagentsConfig(
                 enabled=True,
                 subagents=[
                     ResolvedAttachedSubagentRef(
@@ -260,7 +260,7 @@ async def test_resolve_agents_config_rejects_subagent_with_tool_approvals(
         await resolve_agents_config_activity(
             ResolveAgentsConfigActivityInput(
                 role=role,
-                agents=AgentsConfig.model_validate(
+                agents=AgentSubagentsConfig.model_validate(
                     {
                         "enabled": True,
                         "subagents": [{"preset": "approval-child"}],
@@ -293,7 +293,7 @@ async def test_resolve_agents_config_rejects_invalid_fallback_alias(
         await resolve_agents_config_activity(
             ResolveAgentsConfigActivityInput(
                 role=role,
-                agents=AgentsConfig.model_validate(
+                agents=AgentSubagentsConfig.model_validate(
                     {
                         "enabled": True,
                         "subagents": [{"preset": "Bad Alias"}],

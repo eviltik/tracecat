@@ -78,7 +78,7 @@ from tracecat.agent.runtime.claude_code.session_lines import (
     is_meta_session_line,
     is_synthetic_session_line,
 )
-from tracecat.agent.subagents import AgentsConfig
+from tracecat.agent.subagents import AgentSubagentsConfig
 from tracecat.logger import logger
 
 
@@ -919,7 +919,7 @@ class ClaudeAgentRuntime:
         return f"{base}\n\n{instructions}" if instructions else base
 
     @staticmethod
-    def _agents_config_enabled(config: AgentsConfig) -> bool:
+    def _agents_config_enabled(config: AgentSubagentsConfig) -> bool:
         return config.enabled
 
     def _build_agent_definitions(

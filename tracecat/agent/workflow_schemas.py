@@ -11,7 +11,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Discriminator, Field, model_validator
 
-from tracecat.agent.subagents import AgentsConfig
+from tracecat.agent.subagents import AgentSubagentsConfig
 
 _LEGACY_AGENT_CONFIG_KEYS = frozenset({"deps_type", "custom_tools"})
 
@@ -112,7 +112,7 @@ class AgentConfigPayload(BaseModel):
     tool_approvals: dict[str, bool] | None = Field(default=None)
     model_settings: dict[str, Any] | None = Field(default=None)
     mcp_servers: list[MCPServerConfigPayload] | None = Field(default=None)
-    agents: AgentsConfig = Field(default_factory=AgentsConfig)
+    agents: AgentSubagentsConfig = Field(default_factory=AgentSubagentsConfig)
     retries: int
     enable_thinking: bool = Field(default=True)
     enable_internet_access: bool = Field(default=False)

@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 from pydantic import BaseModel, Field
 
 from tracecat.agent.subagents import (
-    AgentsConfig,
+    AgentSubagentsConfig,
     ResolvedAgentsConfig,
     ResolvedAttachedSubagentRef,
     has_manual_tool_approvals,
@@ -119,14 +119,14 @@ class ResolvedAgentsRuntimeConfig(BaseModel):
 async def resolve_agents_config(
     service: AgentPresetResolutionService,
     *,
-    agents: AgentsConfig | dict[str, Any] | None,
+    agents: AgentSubagentsConfig | dict[str, Any] | None,
     parent_preset_id: uuid.UUID | None = None,
     parent_slug: str | None = None,
     include_runtime_config: bool = False,
 ) -> ResolvedAgentsConfigResult:
     """Resolve and validate preset-backed subagent refs."""
 
-    config = AgentsConfig.model_validate({} if agents is None else agents)
+    config = AgentSubagentsConfig.model_validate({} if agents is None else agents)
     if not config.enabled:
         return ResolvedAgentsConfigResult()
 
@@ -161,7 +161,7 @@ async def resolve_agents_config(
         if references_parent_id or references_parent_slug:
             raise TracecatValidationError("Agent presets cannot reference themselves")
 
-        child_agents = AgentsConfig.model_validate(version.agents)
+        child_agents = AgentSubagentsConfig.model_validate(version.agents)
         if child_agents.enabled:
             raise TracecatValidationError(
                 f"Subagent preset '{ref.preset}' cannot define its own agents in v1"

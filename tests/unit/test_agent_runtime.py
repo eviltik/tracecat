@@ -45,7 +45,7 @@ from tracecat.agent.runtime.claude_code.runtime import (
     TRUSTED_MCP_BRIDGE_URL,
     ClaudeAgentRuntime,
 )
-from tracecat.agent.subagents import AgentsConfig
+from tracecat.agent.subagents import AgentSubagentsConfig
 from tracecat.agent.types import AgentConfig
 
 
@@ -669,7 +669,7 @@ class TestClaudeAgentRuntimeRun:
         payload = replace(
             sample_init_payload,
             config=sample_init_payload.config.model_copy(
-                update={"agents": AgentsConfig(enabled=True)}
+                update={"agents": AgentSubagentsConfig(enabled=True)}
             ),
         )
 
@@ -750,7 +750,7 @@ class TestClaudeAgentRuntimeRun:
             sample_init_payload,
             config=sample_init_payload.config.model_copy(
                 update={
-                    "agents": AgentsConfig.model_validate(
+                    "agents": AgentSubagentsConfig.model_validate(
                         {
                             "enabled": True,
                             "subagents": [{"preset": "analyst"}],
@@ -868,7 +868,7 @@ class TestClaudeAgentRuntimeRun:
             config=sample_init_payload.config.model_copy(
                 update={
                     "enable_internet_access": False,
-                    "agents": AgentsConfig.model_validate(
+                    "agents": AgentSubagentsConfig.model_validate(
                         {
                             "enabled": True,
                             "subagents": [{"preset": "web"}],

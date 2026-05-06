@@ -505,7 +505,7 @@ export type AgentPresetCreate = {
     [key: string]: boolean
   } | null
   mcp_integrations?: Array<string> | null
-  agents?: AgentsConfig_Input
+  agents?: AgentSubagentsConfig_Input
   retries?: number
   enable_thinking?: boolean
   enable_internet_access?: boolean
@@ -531,7 +531,7 @@ export type AgentPresetRead = {
     [key: string]: boolean
   } | null
   mcp_integrations?: Array<string> | null
-  agents?: AgentsConfig_Output
+  agents?: AgentSubagentsConfig_Output
   retries?: number
   enable_thinking?: boolean
   enable_internet_access?: boolean
@@ -613,7 +613,7 @@ export type AgentPresetUpdate = {
     [key: string]: boolean
   } | null
   mcp_integrations?: Array<string> | null
-  agents?: AgentsConfig_Input | null
+  agents?: AgentSubagentsConfig_Input | null
   retries?: number | null
   enable_thinking?: boolean | null
   enable_internet_access?: boolean | null
@@ -654,7 +654,7 @@ export type AgentPresetVersionRead = {
     [key: string]: boolean
   } | null
   mcp_integrations?: Array<string> | null
-  agents?: AgentsConfig_Output
+  agents?: AgentSubagentsConfig_Output
   retries?: number
   enable_thinking?: boolean
   enable_internet_access?: boolean
@@ -897,7 +897,7 @@ export type AgentSettingsUpdate = {
 /**
  * User-facing agents toggle and optional preset-backed subagents.
  */
-export type AgentsConfig_Input = {
+export type AgentSubagentsConfig_Input = {
   enabled?: boolean
   subagents?: Array<AnyAttachedSubagentRef>
 }
@@ -905,7 +905,7 @@ export type AgentsConfig_Input = {
 /**
  * User-facing agents toggle and optional preset-backed subagents.
  */
-export type AgentsConfig_Output = {
+export type AgentSubagentsConfig_Output = {
   enabled?: boolean
   subagents?: Array<AnyAttachedSubagentRef>
 }

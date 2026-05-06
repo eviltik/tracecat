@@ -12,19 +12,15 @@ from tracecat.agent.preset.resolver import (
     ResolvedAgentsRuntimeConfig,
     resolve_agents_config,
 )
-from tracecat.agent.preset.resolver import (
-    ResolvedSubagentConfig as _ResolvedSubagentConfig,
-)
 from tracecat.agent.preset.service import AgentPresetService
 from tracecat.agent.service import AgentManagementService
-from tracecat.agent.subagents import AgentsConfig
+from tracecat.agent.subagents import AgentSubagentsConfig
 from tracecat.agent.workflow_config import agent_config_to_payload
 from tracecat.agent.workflow_schemas import AgentConfigPayload
 from tracecat.auth.types import Role
 from tracecat.db.models import AgentCatalog
 
 ResolveAgentsConfigActivityResult = ResolvedAgentsRuntimeConfig
-ResolvedSubagentConfig = _ResolvedSubagentConfig
 
 
 class ResolveAgentPresetConfigActivityInput(BaseModel):
@@ -60,7 +56,7 @@ class AgentPresetVersionRef(BaseModel):
 
 class ResolveAgentsConfigActivityInput(BaseModel):
     role: Role
-    agents: AgentsConfig = Field(default_factory=AgentsConfig)
+    agents: AgentSubagentsConfig = Field(default_factory=AgentSubagentsConfig)
     parent_preset_id: uuid.UUID | None = None
     parent_slug: str | None = None
 

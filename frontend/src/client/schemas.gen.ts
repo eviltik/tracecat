@@ -1951,7 +1951,7 @@ export const $AgentPresetCreate = {
       title: "Mcp Integrations",
     },
     agents: {
-      $ref: "#/components/schemas/AgentsConfig-Input",
+      $ref: "#/components/schemas/AgentSubagentsConfig-Input",
     },
     retries: {
       type: "integer",
@@ -2135,7 +2135,7 @@ export const $AgentPresetRead = {
       title: "Mcp Integrations",
     },
     agents: {
-      $ref: "#/components/schemas/AgentsConfig-Output",
+      $ref: "#/components/schemas/AgentSubagentsConfig-Output",
     },
     retries: {
       type: "integer",
@@ -2613,7 +2613,7 @@ export const $AgentPresetUpdate = {
     agents: {
       anyOf: [
         {
-          $ref: "#/components/schemas/AgentsConfig-Input",
+          $ref: "#/components/schemas/AgentSubagentsConfig-Input",
         },
         {
           type: "null",
@@ -2880,7 +2880,7 @@ export const $AgentPresetVersionRead = {
       title: "Mcp Integrations",
     },
     agents: {
-      $ref: "#/components/schemas/AgentsConfig-Output",
+      $ref: "#/components/schemas/AgentSubagentsConfig-Output",
     },
     retries: {
       type: "integer",
@@ -3840,7 +3840,7 @@ export const $AgentSettingsUpdate = {
   title: "AgentSettingsUpdate",
 } as const
 
-export const $AgentsConfig_Input = {
+export const $AgentSubagentsConfig_Input = {
   properties: {
     enabled: {
       type: "boolean",
@@ -3857,12 +3857,12 @@ export const $AgentsConfig_Input = {
   },
   additionalProperties: false,
   type: "object",
-  title: "AgentsConfig",
+  title: "AgentSubagentsConfig",
   description:
     "User-facing agents toggle and optional preset-backed subagents.",
 } as const
 
-export const $AgentsConfig_Output = {
+export const $AgentSubagentsConfig_Output = {
   properties: {
     enabled: {
       type: "boolean",
@@ -3879,7 +3879,7 @@ export const $AgentsConfig_Output = {
   },
   additionalProperties: false,
   type: "object",
-  title: "AgentsConfig",
+  title: "AgentSubagentsConfig",
   description:
     "User-facing agents toggle and optional preset-backed subagents.",
 } as const

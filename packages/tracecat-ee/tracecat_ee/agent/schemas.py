@@ -4,7 +4,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from tracecat import config
-from tracecat.agent.subagents import AgentsConfig
+from tracecat.agent.subagents import AgentSubagentsConfig
 from tracecat.agent.types import OutputType
 
 # ``extra="ignore"`` keeps Temporal activity replay working after the legacy
@@ -66,7 +66,7 @@ class AgentActionArgs(BaseModel):
     enable_thinking: bool = True
     base_url: str | None = None
     tool_approvals: dict[str, bool] | None = None
-    agents: AgentsConfig = Field(default_factory=AgentsConfig)
+    agents: AgentSubagentsConfig = Field(default_factory=AgentSubagentsConfig)
 
     @field_validator("agents", mode="before")
     @classmethod

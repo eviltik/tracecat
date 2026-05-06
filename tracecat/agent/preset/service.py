@@ -33,7 +33,7 @@ from tracecat.agent.preset.schemas import (
 from tracecat.agent.preset.types import SkillBindingSpec
 from tracecat.agent.skill.service import SkillService
 from tracecat.agent.subagents import (
-    AgentsConfig,
+    AgentSubagentsConfig,
     AnyAttachedSubagentRef,
     ResolvedAttachedSubagentRef,
 )
@@ -179,7 +179,7 @@ class AgentPresetService(BaseWorkspaceService):
     async def build_preset_read(self, preset: AgentPreset) -> AgentPresetRead:
         """Build the response model for a preset."""
 
-        agents = AgentsConfig.model_validate(preset.agents)
+        agents = AgentSubagentsConfig.model_validate(preset.agents)
         return AgentPresetRead(
             id=preset.id,
             workspace_id=preset.workspace_id,
@@ -215,7 +215,7 @@ class AgentPresetService(BaseWorkspaceService):
     ) -> AgentPresetVersionRead:
         """Build the response model for an immutable preset version."""
 
-        agents = AgentsConfig.model_validate(version.agents)
+        agents = AgentSubagentsConfig.model_validate(version.agents)
         return AgentPresetVersionRead(
             id=version.id,
             preset_id=version.preset_id,
@@ -247,7 +247,7 @@ class AgentPresetService(BaseWorkspaceService):
     async def _build_preset_warnings(
         self,
         *,
-        agents: AgentsConfig,
+        agents: AgentSubagentsConfig,
         enable_internet_access: bool,
     ) -> list[AgentPresetWarning]:
         """Return non-blocking warnings for an agent preset configuration."""
@@ -350,14 +350,14 @@ class AgentPresetService(BaseWorkspaceService):
             namespaces=params.namespaces,
             tool_approvals=params.tool_approvals,
             mcp_integrations=params.mcp_integrations,
-            agents=AgentsConfig().model_dump(mode="json"),
+            agents=AgentSubagentsConfig().model_dump(mode="json"),
             enable_thinking=params.enable_thinking,
             enable_internet_access=params.enable_internet_access,
             retries=params.retries,
         )
         self.session.add(preset)
         await self.session.flush()
-        preset.agents = await self._normalize_agents_for_preset(
+        preset.agents = await self._resolve_preset_subagent_configs(
             params.agents,
             parent_preset_id=preset.id,
             parent_slug=slug,
@@ -454,7 +454,7 @@ class AgentPresetService(BaseWorkspaceService):
                 execution_changed = True
 
         if "agents" in set_fields:
-            agents = await self._normalize_agents_for_preset(
+            agents = await self._resolve_preset_subagent_configs(
                 set_fields.pop("agents"),
                 parent_preset_id=preset.id,
                 parent_slug=preset.slug,
@@ -618,9 +618,9 @@ class AgentPresetService(BaseWorkspaceService):
                 f"{len(missing_ids)} MCP integrations were not found in this workspace: {missing_str}"
             )
 
-    async def _normalize_agents_for_preset(
+    async def _resolve_preset_subagent_configs(
         self,
-        agents: AgentsConfig | dict[str, Any] | None,
+        agents: AgentSubagentsConfig | dict[str, Any] | None,
         *,
         parent_preset_id: uuid.UUID,
         parent_slug: str,
@@ -1554,7 +1554,7 @@ class AgentPresetService(BaseWorkspaceService):
             namespaces=version.namespaces,
             tool_approvals=version.tool_approvals,
             mcp_servers=mcp_servers,
-            agents=AgentsConfig.model_validate(version.agents),
+            agents=AgentSubagentsConfig.model_validate(version.agents),
             retries=version.retries,
             model_settings=model_settings,
             enable_thinking=version.enable_thinking,

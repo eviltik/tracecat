@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, Literal, NotRequired, TypedDict
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from tracecat.agent.subagents import AgentsConfig
+from tracecat.agent.subagents import AgentSubagentsConfig
 
 if TYPE_CHECKING:
     from tracecat.agent.types import AgentConfig
@@ -125,7 +125,7 @@ class SandboxAgentConfig(BaseModel):
     """User-defined MCP servers to connect to."""
 
     # Subagents
-    agents: AgentsConfig = Field(default_factory=AgentsConfig)
+    agents: AgentSubagentsConfig = Field(default_factory=AgentSubagentsConfig)
     """Canonical agents config for sandbox transport."""
 
     # Output

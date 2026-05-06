@@ -70,7 +70,7 @@ class ResolvedAttachedSubagentRef(AttachedSubagentRef):
 type AnyAttachedSubagentRef = ResolvedAttachedSubagentRef | AttachedSubagentRef
 
 
-class AgentsConfig(BaseModel):
+class AgentSubagentsConfig(BaseModel):
     """User-facing agents toggle and optional preset-backed subagents."""
 
     model_config = ConfigDict(extra="forbid")

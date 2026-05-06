@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
-from tracecat.agent.subagents import AgentsConfig, has_manual_tool_approvals
+from tracecat.agent.subagents import AgentSubagentsConfig, has_manual_tool_approvals
 from tracecat.agent.types import AgentConfig, OutputType
 from tracecat.core.schemas import Schema
 from tracecat.identifiers import WorkspaceID
@@ -77,7 +77,7 @@ class AgentPresetExecutionConfig(Schema):
     namespaces: list[str] | None = Field(default=None)
     tool_approvals: dict[str, bool] | None = Field(default=None)
     mcp_integrations: list[str] | None = Field(default=None)
-    agents: AgentsConfig = Field(default_factory=AgentsConfig)
+    agents: AgentSubagentsConfig = Field(default_factory=AgentSubagentsConfig)
     retries: int = Field(default=3, ge=0)
     enable_thinking: bool = Field(default=True)
     enable_internet_access: bool = Field(default=False)
@@ -96,7 +96,7 @@ class AgentPresetExecutionConfigWrite(Schema):
     namespaces: list[str] | None = Field(default=None)
     tool_approvals: dict[str, bool] | None = Field(default=None)
     mcp_integrations: list[str] | None = Field(default=None)
-    agents: AgentsConfig = Field(default_factory=AgentsConfig)
+    agents: AgentSubagentsConfig = Field(default_factory=AgentSubagentsConfig)
     retries: int = Field(default=3, ge=0)
     enable_thinking: bool = Field(default=True)
     enable_internet_access: bool = Field(default=False)
@@ -132,7 +132,7 @@ class AgentPresetUpdate(BaseModel):
     namespaces: list[str] | None = Field(default=None)
     tool_approvals: dict[str, bool] | None = Field(default=None)
     mcp_integrations: list[str] | None = Field(default=None)
-    agents: AgentsConfig | None = Field(default=None)
+    agents: AgentSubagentsConfig | None = Field(default=None)
     retries: int | None = Field(default=None, ge=0)
     enable_thinking: bool | None = Field(default=None)
     enable_internet_access: bool | None = Field(default=None)
@@ -168,7 +168,9 @@ def build_agent_preset_read_minimal(
 ) -> AgentPresetReadMinimal:
     """Build a minimal preset response without exposing approval rule details."""
     read = AgentPresetReadMinimal.model_validate(preset)
-    agents_config = cast(AgentsConfig | Mapping[str, object] | None, preset.agents)
+    agents_config = cast(
+        AgentSubagentsConfig | Mapping[str, object] | None, preset.agents
+    )
     tool_approvals = cast(Mapping[str, bool] | None, preset.tool_approvals)
     subagent_unavailable = _subagent_unavailable_metadata(
         agents_config=agents_config,
@@ -189,14 +191,14 @@ def build_agent_preset_read_minimal(
 
 def _agent_preset_capabilities(
     *,
-    agents_config: AgentsConfig | Mapping[str, object] | None,
+    agents_config: AgentSubagentsConfig | Mapping[str, object] | None,
     tool_approvals: Mapping[str, bool] | None,
     enable_internet_access: bool,
 ) -> list[AgentPresetCapability]:
     """Return lightweight capability flags for preset list UIs."""
 
     capabilities: list[AgentPresetCapability] = []
-    agents = AgentsConfig.model_validate(agents_config or {})
+    agents = AgentSubagentsConfig.model_validate(agents_config or {})
     if has_manual_tool_approvals(tool_approvals):
         capabilities.append("approvals")
     if agents.enabled:
@@ -208,12 +210,12 @@ def _agent_preset_capabilities(
 
 def _subagent_unavailable_metadata(
     *,
-    agents_config: AgentsConfig | Mapping[str, object] | None,
+    agents_config: AgentSubagentsConfig | Mapping[str, object] | None,
     tool_approvals: Mapping[str, bool] | None,
 ) -> tuple[Literal["agents_enabled", "tool_approvals"] | None, str | None]:
     """Return why this preset cannot be attached as a preset-backed subagent."""
 
-    agents = AgentsConfig.model_validate(agents_config or {})
+    agents = AgentSubagentsConfig.model_validate(agents_config or {})
     if agents.enabled:
         return (
             "agents_enabled",
