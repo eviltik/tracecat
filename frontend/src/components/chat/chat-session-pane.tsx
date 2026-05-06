@@ -267,10 +267,28 @@ export function ChatSessionPane({
   // Check if this is a legacy read-only session
   const isReadonly = chat ? "is_readonly" in chat && chat.is_readonly : false
 
-  const uiMessages = useMemo(
-    () => (chat?.messages || []).map(toUIMessage),
-    [chat?.messages]
-  )
+  const pendingUserMessageKey = chat?.id ? `chat-pending-msg:${chat.id}` : null
+
+  const uiMessages = useMemo(() => {
+    const persisted = (chat?.messages || []).map(toUIMessage)
+    if (!pendingUserMessageKey) return persisted
+
+    const stored = sessionStorage.getItem(pendingUserMessageKey)
+    if (!stored) return persisted
+
+    const pending: UIMessage = JSON.parse(stored)
+    const pendingText = pending.parts.find((p) => p.type === "text")?.text
+    const alreadyPresent = persisted.some(
+      (m) =>
+        m.role === "user" &&
+        m.parts.some((p) => p.type === "text" && p.text === pendingText)
+    )
+    if (alreadyPresent) {
+      sessionStorage.removeItem(pendingUserMessageKey)
+      return persisted
+    }
+    return [...persisted, pending]
+  }, [chat?.messages, pendingUserMessageKey])
   const { sendMessage, messages, status, regenerate, lastError, clearError } =
     useVercelChat({
       chatId: chat?.id,
@@ -854,6 +872,19 @@ export function ChatSessionPane({
     try {
       await persistToolsChainRef.current.catch(() => undefined)
       clearError()
+
+      if (pendingUserMessageKey) {
+        const pendingMsg: UIMessage = {
+          id: `pending-${Date.now()}`,
+          role: "user",
+          parts: [{ type: "text", text: messageText }],
+        }
+        sessionStorage.setItem(
+          pendingUserMessageKey,
+          JSON.stringify(pendingMsg)
+        )
+      }
+
       sendMessage({
         text: messageText,
         ...(message.files?.length ? { files: message.files } : {}),
