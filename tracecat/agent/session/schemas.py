@@ -110,7 +110,7 @@ class AgentSessionRead(BaseModel):
     tools: list[str] | None
     agent_preset_id: uuid.UUID | None
     agent_preset_version_id: uuid.UUID | None
-    agents_binding: ResolvedAgentsConfig | None
+    agents_binding: ResolvedAgentsConfig | None = None
     # Harness
     harness_type: str | None
     # Stream tracking

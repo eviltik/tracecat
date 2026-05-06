@@ -778,7 +778,7 @@ export type AgentSessionRead = {
   tools: Array<string> | null
   agent_preset_id: string | null
   agent_preset_version_id: string | null
-  agents_binding: ResolvedAgentsConfig | null
+  agents_binding?: ResolvedAgentsConfig | null
   harness_type: string | null
   last_stream_id?: string | null
   parent_session_id?: string | null
@@ -802,7 +802,7 @@ export type AgentSessionReadVercel = {
   tools: Array<string> | null
   agent_preset_id: string | null
   agent_preset_version_id: string | null
-  agents_binding: ResolvedAgentsConfig | null
+  agents_binding?: ResolvedAgentsConfig | null
   harness_type: string | null
   last_stream_id?: string | null
   parent_session_id?: string | null
@@ -830,7 +830,7 @@ export type AgentSessionReadWithMessages = {
   tools: Array<string> | null
   agent_preset_id: string | null
   agent_preset_version_id: string | null
-  agents_binding: ResolvedAgentsConfig | null
+  agents_binding?: ResolvedAgentsConfig | null
   harness_type: string | null
   last_stream_id?: string | null
   parent_session_id?: string | null
