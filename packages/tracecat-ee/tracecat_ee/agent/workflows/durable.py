@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
@@ -40,11 +41,11 @@ with workflow.unsafe.imports_passed_through():
         ResolveAgentPresetConfigActivityInput,
         ResolveAgentsConfigActivityInput,
         ResolveAgentsConfigActivityResult,
-        ResolvedSubagentConfig,
         resolve_agent_preset_config_activity,
         resolve_agents_config_activity,
         resolve_custom_model_provider_config_activity,
     )
+    from tracecat.agent.preset.resolver import ResolvedSubagentConfig
     from tracecat.agent.schemas import AgentOutput, RunAgentArgs, RunUsage, ToolFilters
     from tracecat.agent.session.activities import (
         CreateSessionInput,
@@ -95,6 +96,12 @@ AGENT_TOOL_DEFINITION_ERROR = "AgentToolDefinitionError"
 ROOT_AGENT_SCOPE = "root"
 
 
+@dataclass(frozen=True, slots=True)
+class LLMRouteResolution:
+    route_model: str
+    claim: LLMRouteClaim
+
+
 def _activity_error_message(error: ActivityError) -> str:
     cause = error.cause
     if cause is not None:
@@ -142,19 +149,22 @@ def _llm_route_for_config(
     cfg: AgentConfig,
     *,
     use_workspace_credentials: bool,
-) -> tuple[str, LLMRouteClaim]:
+) -> LLMRouteResolution:
     route_model = get_litellm_route_model(
         model_provider=cfg.model_provider,
         model_name=cfg.model_name,
         passthrough=cfg.passthrough,
     )
-    return route_model, LLMRouteClaim(
-        model=cfg.model_name,
-        provider=cfg.model_provider,
-        catalog_id=cfg.catalog_id,
-        base_url=cfg.base_url,
-        model_settings=cfg.model_settings or {},
-        use_workspace_credentials=use_workspace_credentials,
+    return LLMRouteResolution(
+        route_model=route_model,
+        claim=LLMRouteClaim(
+            model=cfg.model_name,
+            provider=cfg.model_provider,
+            catalog_id=cfg.catalog_id,
+            base_url=cfg.base_url,
+            model_settings=cfg.model_settings or {},
+            use_workspace_credentials=use_workspace_credentials,
+        ),
     )
 
 
@@ -577,15 +587,15 @@ class DurableAgentWorkflow:
                     f"Batched agent tool compilation did not return scope '{scope_spec.name}'",
                     non_retryable=True,
                 )
-            route_model, route_claim = _llm_route_for_config(
+            route_resolution = _llm_route_for_config(
                 scope_spec.config,
                 use_workspace_credentials=use_workspace_credentials,
             )
             scoped_route_model = _subagent_litellm_route_model(
                 scope_spec.name,
-                route_model,
+                route_resolution.route_model,
             )
-            llm_routes[scoped_route_model] = route_claim
+            llm_routes[scoped_route_model] = route_resolution.claim
 
             compiled_subagents.append(
                 CompiledSubagentScope(
