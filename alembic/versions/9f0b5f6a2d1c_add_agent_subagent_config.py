@@ -1,7 +1,7 @@
 """add agent subagent config
 
 Revision ID: 9f0b5f6a2d1c
-Revises: 8b2f6a9c4d10
+Revises: d0b32dce7f81
 Create Date: 2026-04-23 19:45:00.000000
 
 """
@@ -15,7 +15,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "9f0b5f6a2d1c"
-down_revision: str | None = "8b2f6a9c4d10"
+down_revision: str | None = "d0b32dce7f81"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
