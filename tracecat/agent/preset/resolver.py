@@ -157,7 +157,11 @@ async def resolve_agents_config(
         references_parent_id = (
             parent_preset_id is not None and version.preset_id == parent_preset_id
         )
-        references_parent_slug = parent_slug is not None and ref.preset == parent_slug
+        references_parent_slug = (
+            preset_version_id is None
+            and parent_slug is not None
+            and ref.preset == parent_slug
+        )
         if references_parent_id or references_parent_slug:
             raise TracecatValidationError("Agent presets cannot reference themselves")
 

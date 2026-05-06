@@ -27,7 +27,7 @@ from tracecat.agent.skill.schemas import (
     SkillDraftUpsertTextFileOp,
 )
 from tracecat.agent.skill.service import SkillService
-from tracecat.agent.subagents import AgentSubagentsConfig
+from tracecat.agent.subagents import AgentSubagentsConfig, ResolvedAttachedSubagentRef
 from tracecat.agent.types import AgentConfig
 from tracecat.auth.types import Role
 from tracecat.db.models import (
@@ -2367,6 +2367,50 @@ class TestAgentPresetService:
             ),
         ):
             await agent_preset_service.create_preset(parent_params)
+
+    async def test_create_parent_allows_pinned_subagent_with_reused_parent_slug(
+        self,
+        agent_preset_service: AgentPresetService,
+        agent_preset_create_params: AgentPresetCreate,
+    ) -> None:
+        """Pinned subagent refs compare immutable IDs instead of stale slugs."""
+        child = await agent_preset_service.create_preset(
+            agent_preset_create_params.model_copy(
+                update={"name": "Original Child", "slug": "reused-slug"}
+            )
+        )
+        child_version = await agent_preset_service.get_current_version_for_preset(child)
+        await agent_preset_service.update_preset(
+            child,
+            AgentPresetUpdate(slug="renamed-child"),
+        )
+
+        parent = await agent_preset_service.create_preset(
+            agent_preset_create_params.model_copy(
+                update={
+                    "name": "Parent Agent",
+                    "slug": "reused-slug",
+                    "agents": AgentSubagentsConfig.model_validate(
+                        {
+                            "enabled": True,
+                            "subagents": [
+                                {
+                                    "preset": "reused-slug",
+                                    "preset_version": child_version.version,
+                                    "preset_id": child.id,
+                                    "preset_version_id": child_version.id,
+                                }
+                            ],
+                        }
+                    ),
+                }
+            )
+        )
+
+        agents = AgentSubagentsConfig.model_validate(parent.agents)
+        assert agents.enabled is True
+        assert isinstance(agents.subagents[0], ResolvedAttachedSubagentRef)
+        assert agents.subagents[0].preset_id == child.id
 
     async def test_update_parent_rejects_subagent_with_tool_approvals(
         self,
