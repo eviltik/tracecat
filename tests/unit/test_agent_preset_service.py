@@ -2102,6 +2102,50 @@ class TestAgentPresetService:
         }
         assert await agent_preset_service.get_preset(child.id) is not None
 
+    async def test_delete_preset_ignores_resolved_reference_with_reused_slug(
+        self,
+        agent_preset_service: AgentPresetService,
+        agent_preset_create_params: AgentPresetCreate,
+    ) -> None:
+        """Resolved refs use preset_id, so stale slugs do not block a new preset."""
+        original_child = await agent_preset_service.create_preset(
+            agent_preset_create_params.model_copy(
+                update={"name": "Original Child", "slug": "reused-child"}
+            )
+        )
+        await agent_preset_service.create_preset(
+            agent_preset_create_params.model_copy(
+                update={
+                    "name": "Referencing Parent",
+                    "slug": "referencing-parent",
+                    "agents": AgentSubagentsConfig.model_validate(
+                        {
+                            "enabled": True,
+                            "subagents": [{"preset": original_child.slug}],
+                        }
+                    ),
+                }
+            )
+        )
+        await agent_preset_service.update_preset(
+            original_child,
+            AgentPresetUpdate(slug="renamed-child"),
+        )
+        new_child = await agent_preset_service.create_preset(
+            agent_preset_create_params.model_copy(
+                update={"name": "New Child", "slug": "reused-child"}
+            )
+        )
+
+        await agent_preset_service.delete_preset(new_child)
+
+        assert await agent_preset_service.get_preset(new_child.id) is None
+        with pytest.raises(
+            TracecatValidationError,
+            match="still referenced as a subagent",
+        ):
+            await agent_preset_service.delete_preset(original_child)
+
     async def test_get_preset_by_slug(
         self,
         agent_preset_service: AgentPresetService,

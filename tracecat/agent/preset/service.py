@@ -462,7 +462,7 @@ class AgentPresetService(BaseWorkspaceService):
         subagent_ref = {"subagents": [{"preset_id": str(preset.id)}]}
         legacy_slug_ref = {"subagents": [{"preset": preset.slug}]}
         head_reference_stmt = (
-            select(func.count())
+            select(AgentPreset.agents)
             .select_from(AgentPreset)
             .where(
                 AgentPreset.workspace_id == self.workspace_id,
@@ -474,7 +474,7 @@ class AgentPresetService(BaseWorkspaceService):
             )
         )
         history_reference_stmt = (
-            select(func.count())
+            select(AgentPresetVersion.agents)
             .select_from(AgentPresetVersion)
             .where(
                 AgentPresetVersion.workspace_id == self.workspace_id,
@@ -485,11 +485,15 @@ class AgentPresetService(BaseWorkspaceService):
                 ),
             )
         )
-        head_reference_count = int(
-            (await self.session.execute(head_reference_stmt)).scalar_one() or 0
+        head_reference_count = self._count_preset_subagent_references(
+            list((await self.session.execute(head_reference_stmt)).scalars()),
+            preset_id=preset.id,
+            slug=preset.slug,
         )
-        history_reference_count = int(
-            (await self.session.execute(history_reference_stmt)).scalar_one() or 0
+        history_reference_count = self._count_preset_subagent_references(
+            list((await self.session.execute(history_reference_stmt)).scalars()),
+            preset_id=preset.id,
+            slug=preset.slug,
         )
         if head_reference_count > 0 or history_reference_count > 0:
             raise TracecatValidationError(
@@ -500,6 +504,46 @@ class AgentPresetService(BaseWorkspaceService):
                     "history_reference_count": history_reference_count,
                 },
             )
+
+    @classmethod
+    def _count_preset_subagent_references(
+        cls,
+        agents_configs: Sequence[dict[str, Any]],
+        *,
+        preset_id: uuid.UUID,
+        slug: str,
+    ) -> int:
+        return sum(
+            cls._agents_config_references_preset(
+                agents,
+                preset_id=preset_id,
+                slug=slug,
+            )
+            for agents in agents_configs
+        )
+
+    @staticmethod
+    def _agents_config_references_preset(
+        agents: dict[str, Any],
+        *,
+        preset_id: uuid.UUID,
+        slug: str,
+    ) -> bool:
+        subagents = agents.get("subagents")
+        if not isinstance(subagents, list):
+            return False
+
+        preset_id_str = str(preset_id)
+        for subagent in subagents:
+            if not isinstance(subagent, dict):
+                continue
+            if subagent_preset_id := subagent.get("preset_id"):
+                if str(subagent_preset_id) == preset_id_str:
+                    return True
+                continue
+            if subagent.get("preset") == slug:
+                return True
+        return False
 
     @requires_entitlement(Entitlement.AGENT_ADDONS)
     async def resolve_agent_preset_config(
