@@ -542,7 +542,6 @@ export type AgentPresetRead = {
   description?: string | null
   current_version_id?: string | null
   skills?: Array<AgentPresetSkillBindingRead>
-  warnings?: Array<AgentPresetWarning>
   created_at: string
   updated_at: string
 }
@@ -677,7 +676,6 @@ export type AgentPresetVersionRead = {
   capabilities?: Array<AgentPresetCapability>
   subagent_eligibility?: AgentPresetSubagentEligibility
   skills?: Array<AgentPresetSkillBindingRead>
-  warnings?: Array<AgentPresetWarning>
   created_at: string
   updated_at: string
 }
@@ -694,15 +692,6 @@ export type AgentPresetVersionReadMinimal = {
   subagent_eligibility?: AgentPresetSubagentEligibility
   created_at: string
   updated_at: string
-}
-
-/**
- * Non-blocking configuration warning for an agent preset.
- */
-export type AgentPresetWarning = {
-  code: "subagent_internet_requires_parent"
-  message: string
-  subagent_aliases?: Array<string>
 }
 
 /**

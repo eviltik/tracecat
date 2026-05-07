@@ -2202,13 +2202,6 @@ export const $AgentPresetRead = {
       type: "array",
       title: "Skills",
     },
-    warnings: {
-      items: {
-        $ref: "#/components/schemas/AgentPresetWarning",
-      },
-      type: "array",
-      title: "Warnings",
-    },
     created_at: {
       type: "string",
       format: "date-time",
@@ -2951,13 +2944,6 @@ export const $AgentPresetVersionRead = {
       type: "array",
       title: "Skills",
     },
-    warnings: {
-      items: {
-        $ref: "#/components/schemas/AgentPresetWarning",
-      },
-      type: "array",
-      title: "Warnings",
-    },
     created_at: {
       type: "string",
       format: "date-time",
@@ -3037,31 +3023,6 @@ export const $AgentPresetVersionReadMinimal = {
   ],
   title: "AgentPresetVersionReadMinimal",
   description: "Metadata returned when listing immutable preset versions.",
-} as const
-
-export const $AgentPresetWarning = {
-  properties: {
-    code: {
-      type: "string",
-      const: "subagent_internet_requires_parent",
-      title: "Code",
-    },
-    message: {
-      type: "string",
-      title: "Message",
-    },
-    subagent_aliases: {
-      items: {
-        type: "string",
-      },
-      type: "array",
-      title: "Subagent Aliases",
-    },
-  },
-  type: "object",
-  required: ["code", "message"],
-  title: "AgentPresetWarning",
-  description: "Non-blocking configuration warning for an agent preset.",
 } as const
 
 export const $AgentSessionCreate = {

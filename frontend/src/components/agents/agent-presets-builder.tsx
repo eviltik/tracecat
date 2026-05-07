@@ -53,7 +53,6 @@ import type {
   AgentPresetSubagentEligibility,
   AgentPresetUpdate,
   AgentPresetVersionReadMinimal,
-  AgentPresetWarning,
   AttachedSubagentRef,
   SkillReadMinimal,
   SkillVersionRead,
@@ -2459,9 +2458,6 @@ function AgentPresetSubagentsPanel({
     useWatch({ control: form.control, name: "enableInternetAccess" }) ?? false
   const selectedSubagents =
     useWatch({ control: form.control, name: "subagents" }) ?? []
-  const savedInternetAccessWarning = parentPreset?.warnings?.find(
-    (warning) => warning.code === "subagent_internet_requires_parent"
-  )
   const presetOptions = useMemo(
     () =>
       agentPresets
@@ -2475,17 +2471,10 @@ function AgentPresetSubagentsPanel({
       presets: presetOptions,
       versionsByPresetId,
     })
-  const currentSubagentAliases = new Set(
-    selectedSubagents
-      .map((subagent) => getSubagentFormAlias(subagent))
-      .filter(Boolean)
-  )
   const internetAccessWarningMessage = getInternetAccessWarningMessage({
     agentsEnabled,
     parentInternetAccessEnabled,
     selectedInternetAccessSubagentAliases,
-    savedWarning: savedInternetAccessWarning,
-    currentSubagentAliases,
   })
 
   return (
@@ -3920,29 +3909,19 @@ function getInternetAccessWarningMessage({
   agentsEnabled,
   parentInternetAccessEnabled,
   selectedInternetAccessSubagentAliases,
-  savedWarning,
-  currentSubagentAliases,
 }: {
   agentsEnabled: boolean
   parentInternetAccessEnabled: boolean
   selectedInternetAccessSubagentAliases: string[]
-  savedWarning: AgentPresetWarning | undefined
-  currentSubagentAliases: Set<string>
 }): string | null {
-  if (!agentsEnabled || parentInternetAccessEnabled) {
+  if (
+    !agentsEnabled ||
+    parentInternetAccessEnabled ||
+    selectedInternetAccessSubagentAliases.length === 0
+  ) {
     return null
   }
-  if (selectedInternetAccessSubagentAliases.length > 0) {
-    return LIVE_INTERNET_ACCESS_WARNING_MESSAGE
-  }
-  const savedAliases = savedWarning?.subagent_aliases ?? []
-  const savedWarningApplies = savedAliases.some((alias) =>
-    currentSubagentAliases.has(alias)
-  )
-  if (savedWarningApplies) {
-    return savedWarning?.message ?? LIVE_INTERNET_ACCESS_WARNING_MESSAGE
-  }
-  return null
+  return LIVE_INTERNET_ACCESS_WARNING_MESSAGE
 }
 
 function parseOptionalPositiveInteger(value: string | null | undefined) {

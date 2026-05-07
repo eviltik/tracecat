@@ -25,7 +25,6 @@ from tracecat.agent.preset.schemas import (
     AgentPresetVersionDiff,
     AgentPresetVersionRead,
     AgentPresetVersionReadMinimal,
-    AgentPresetWarning,
     ScalarFieldChange,
     StringListFieldChange,
     ToolApprovalFieldChange,
@@ -36,8 +35,6 @@ from tracecat.agent.preset.types import SkillBindingSpec
 from tracecat.agent.skill.service import SkillService
 from tracecat.agent.subagents import (
     AgentSubagentsConfig,
-    AnyAttachedSubagentRef,
-    ResolvedAttachedSubagentRef,
 )
 from tracecat.agent.types import (
     AgentConfig,
@@ -206,10 +203,6 @@ class AgentPresetService(BaseWorkspaceService):
             created_at=preset.created_at,
             updated_at=preset.updated_at,
             skills=await self._list_head_skill_bindings(preset.id),
-            warnings=await self._build_preset_warnings(
-                agents=agents,
-                enable_internet_access=preset.enable_internet_access,
-            ),
         )
 
     async def build_version_read(
@@ -249,72 +242,7 @@ class AgentPresetService(BaseWorkspaceService):
             created_at=version.created_at,
             updated_at=version.updated_at,
             skills=await self._list_version_skill_bindings(version.id),
-            warnings=await self._build_preset_warnings(
-                agents=agents,
-                enable_internet_access=version.enable_internet_access,
-            ),
         )
-
-    async def _build_preset_warnings(
-        self,
-        *,
-        agents: AgentSubagentsConfig,
-        enable_internet_access: bool,
-    ) -> list[AgentPresetWarning]:
-        """Return non-blocking warnings for an agent preset configuration."""
-
-        if enable_internet_access or not agents.enabled or not agents.subagents:
-            return []
-
-        subagent_aliases = await self._internet_enabled_subagent_aliases(
-            agents.subagents
-        )
-        if not subagent_aliases:
-            return []
-
-        return [
-            AgentPresetWarning(
-                code="subagent_internet_requires_parent",
-                message=(
-                    "One or more subagents have internet access enabled, but the "
-                    "parent agent does not. Enable internet access on the parent "
-                    "agent for those subagents to use web tools."
-                ),
-                subagent_aliases=subagent_aliases,
-            )
-        ]
-
-    async def _internet_enabled_subagent_aliases(
-        self,
-        subagents: Sequence[AnyAttachedSubagentRef],
-    ) -> list[str]:
-        """Return aliases whose pinned preset versions enable internet access."""
-
-        aliases_by_version_id: dict[uuid.UUID, list[str]] = {}
-        for ref in subagents:
-            if not isinstance(ref, ResolvedAttachedSubagentRef):
-                continue
-            aliases_by_version_id.setdefault(ref.preset_version_id, []).append(
-                ref.alias
-            )
-
-        if not aliases_by_version_id:
-            return []
-
-        stmt = select(
-            AgentPresetVersion.id,
-            AgentPresetVersion.enable_internet_access,
-        ).where(
-            AgentPresetVersion.workspace_id == self.workspace_id,
-            AgentPresetVersion.id.in_(list(aliases_by_version_id)),
-        )
-        rows = (await self.session.execute(stmt)).tuples().all()
-        return [
-            alias
-            for version_id, enable_internet_access in rows
-            if enable_internet_access
-            for alias in aliases_by_version_id[version_id]
-        ]
 
     @require_scope("agent:create")
     @audit_log(resource_type="agent_preset", action="create")
