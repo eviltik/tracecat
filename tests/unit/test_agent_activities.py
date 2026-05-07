@@ -490,6 +490,38 @@ class TestCreateSessionActivity:
 
     @pytest.mark.anyio
     @patch("tracecat.agent.session.activities.AgentSessionService.with_session")
+    async def test_rejects_existing_session_when_agents_disabled_after_binding(
+        self, mock_with_session, mock_role: Role, mock_session_id: uuid.UUID
+    ):
+        """A missing incoming binding is still a mismatch for bound sessions."""
+        input = CreateSessionInput(
+            role=mock_role,
+            session_id=mock_session_id,
+            entity_type=AgentSessionEntity.AGENT_PRESET,
+            entity_id=uuid.uuid4(),
+        )
+
+        mock_agent_session = MagicMock()
+        mock_agent_session.agents_binding = {"enabled": True, "subagents": []}
+        mock_service = AsyncMock()
+        mock_service.get_or_create_session.return_value = (
+            mock_agent_session,
+            False,
+        )
+
+        mock_ctx = AsyncMock()
+        mock_ctx.__aenter__.return_value = mock_service
+        mock_with_session.return_value = mock_ctx
+
+        result = await create_session_activity(input)
+
+        assert result.success is False
+        assert (
+            result.error == "Agent session was created with a different agents binding"
+        )
+
+    @pytest.mark.anyio
+    @patch("tracecat.agent.session.activities.AgentSessionService.with_session")
     async def test_uses_existing_session_when_required(
         self, mock_with_session, mock_role: Role, mock_session_id: uuid.UUID
     ):

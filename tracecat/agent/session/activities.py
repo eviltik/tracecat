@@ -143,23 +143,30 @@ async def create_session_activity(input: CreateSessionInput) -> CreateSessionRes
             # missing (sessions created before binding was persisted), or fail
             # fast if the caller is trying to swap bindings mid-session, which
             # would invalidate the SDK history we resume from.
-            if not created and input.agents_binding is not None:
-                if agent_session.agents_binding is None:
+            if not created:
+                if (
+                    agent_session.agents_binding is None
+                    and input.agents_binding is not None
+                ):
                     agent_session.agents_binding = input.agents_binding.model_dump(
                         mode="json"
                     )
                     service.session.add(agent_session)
                     await service.session.commit()
-                elif (
-                    ResolvedAgentsConfig(**agent_session.agents_binding)
-                    != input.agents_binding
-                ):
-                    # Non-retryable: retrying with the same mismatched input
-                    # will deterministically fail; surface to the caller.
-                    raise ApplicationError(
-                        "Agent session was created with a different agents binding",
-                        non_retryable=True,
+                elif agent_session.agents_binding is not None:
+                    requested_agents_binding = (
+                        input.agents_binding or ResolvedAgentsConfig()
                     )
+                    if (
+                        ResolvedAgentsConfig(**agent_session.agents_binding)
+                        != requested_agents_binding
+                    ):
+                        # Non-retryable: retrying with the same mismatched input
+                        # will deterministically fail; surface to the caller.
+                        raise ApplicationError(
+                            "Agent session was created with a different agents binding",
+                            non_retryable=True,
+                        )
 
             # Set curr_run_id if provided (for workflow-initiated sessions)
             if input.curr_run_id is not None:
