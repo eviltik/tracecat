@@ -215,7 +215,7 @@ class ClaudeAgentRuntime:
         # Public for testing - these represent runtime configuration
         self.registry_tools: dict[str, MCPToolDefinition] | None = None
         self.tool_approvals: dict[str, bool] | None = None
-        self._scope_internet_access: dict[str, bool] = {}
+        self._root_internet_access_enabled: bool = False
         self._explicit_subagent_aliases: set[str] = set()
         self._registry_mcp_server_names: set[str] = {REGISTRY_MCP_SERVER_NAME}
         self._root_agents_enabled: bool = False
@@ -382,12 +382,6 @@ class ClaudeAgentRuntime:
             if isinstance(agent_type, str) and agent_type:
                 return agent_type
         return None
-
-    def _internet_policy_scope(self, input_data: HookInput) -> str:
-        agent_type = self._hook_agent_type(input_data)
-        if agent_type in self._explicit_subagent_aliases:
-            return agent_type
-        return "root"
 
     def _explicit_subagent_alias_for_tool(
         self,
@@ -806,17 +800,14 @@ class ClaudeAgentRuntime:
                 }
             }
 
-        internet_policy_scope = self._internet_policy_scope(input_data)
-        if tool_name in INTERNET_TOOLS and not self._scope_internet_access.get(
-            internet_policy_scope, False
-        ):
+        if tool_name in INTERNET_TOOLS and not self._root_internet_access_enabled:
             return {
                 "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
                     "permissionDecision": "deny",
                     "permissionDecisionReason": (
-                        f"Tool '{tool_name}' is disabled for agent scope "
-                        f"'{internet_policy_scope}'."
+                        f"Tool '{tool_name}' is disabled because internet access is "
+                        "disabled for the root agent."
                     ),
                 }
             }
@@ -953,10 +944,7 @@ class ClaudeAgentRuntime:
             )
 
             disallowed_tools = list(CHILD_AGENT_DISALLOWED_TOOLS)
-            if not (
-                payload.config.enable_internet_access
-                and subagent.config.enable_internet_access
-            ):
+            if not payload.config.enable_internet_access:
                 disallowed_tools.extend(INTERNET_TOOLS)
 
             allowed_tools = self._allowed_tools_for_mcp_scope(
@@ -1027,15 +1015,7 @@ class ClaudeAgentRuntime:
                 if subagent.allowed_actions
             ),
         }
-        root_internet_access = payload.config.enable_internet_access
-        self._scope_internet_access = {
-            "root": payload.config.enable_internet_access,
-            **{
-                subagent.alias: root_internet_access
-                and subagent.config.enable_internet_access
-                for subagent in payload.subagents
-            },
-        }
+        self._root_internet_access_enabled = payload.config.enable_internet_access
         runtime_internet_access = sandbox_requires_internet_access(
             payload.config,
             payload.subagents,
@@ -1092,9 +1072,7 @@ class ClaudeAgentRuntime:
 
             # Build disallowed tools list based on environment and config
             # - Always blocked: interactive/planning tools (DISALLOWED_TOOLS)
-            # - Internet tools: blocked unless the root sandbox can use them.
-            #   Child definitions and the hook enforce subagent-specific access
-            #   when root internet access is enabled.
+            # - Internet tools: blocked unless root internet access is enabled.
             # Filesystem tools (Bash, Read, Write, etc.) are always allowed:
             # - nsjail mode: sandbox provides OS-level isolation
             # - direct mode: SandboxSettings + stable cwd scopes file access
