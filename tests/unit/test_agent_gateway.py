@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -216,19 +217,32 @@ def _make_request(
     *,
     headers: list[tuple[bytes, bytes]] | None = None,
     query_string: bytes = b"",
+    json_body: dict[str, Any] | None = None,
 ) -> Request:
-    return Request(
-        {
-            "type": "http",
-            "method": "GET",
-            "path": path,
-            "headers": headers or [],
-            "query_string": query_string,
-            "scheme": "http",
-            "server": ("127.0.0.1", 4000),
-            "client": ("127.0.0.1", 12345),
-        }
-    )
+    scope = {
+        "type": "http",
+        "method": "POST" if json_body is not None else "GET",
+        "path": path,
+        "headers": headers or [],
+        "query_string": query_string,
+        "scheme": "http",
+        "server": ("127.0.0.1", 4000),
+        "client": ("127.0.0.1", 12345),
+    }
+    if json_body is None:
+        return Request(scope)
+
+    body = json.dumps(json_body).encode()
+    sent = False
+
+    async def receive() -> dict[str, object]:
+        nonlocal sent
+        if sent:
+            return {"type": "http.disconnect"}
+        sent = True
+        return {"type": "http.request", "body": body, "more_body": False}
+
+    return Request(scope, receive)
 
 
 @pytest.mark.anyio
@@ -322,6 +336,88 @@ async def test_user_api_key_auth_preserves_anthropic_beta_metadata_for_anthropic
 
     assert request.headers["anthropic-beta"] == "clear_thinking_20251015"
     assert request.query_params["beta"] == "true"
+
+
+@pytest.mark.anyio
+async def test_user_api_key_auth_preserves_anthropic_beta_metadata_for_anthropic_route(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "tracecat.agent.gateway.verify_llm_token",
+        lambda _: SimpleNamespace(
+            workspace_id="00000000-0000-0000-0000-000000000001",
+            organization_id="00000000-0000-0000-0000-000000000002",
+            session_id="00000000-0000-0000-0000-000000000003",
+            catalog_id=None,
+            use_workspace_credentials=False,
+            model="gpt-5",
+            provider="openai",
+            base_url=None,
+            model_settings={},
+            routes={
+                "anthropic/claude-sonnet-4": SimpleNamespace(
+                    model="claude-sonnet-4",
+                    provider="anthropic",
+                    catalog_id=None,
+                    base_url=None,
+                    model_settings={},
+                    use_workspace_credentials=False,
+                )
+            },
+        ),
+    )
+    request = _make_request(
+        "/v1/messages",
+        headers=[(b"anthropic-beta", b"clear_thinking_20251015")],
+        query_string=b"beta=true",
+        json_body={"model": "anthropic/claude-sonnet-4"},
+    )
+
+    await user_api_key_auth(request, api_key="valid-token")
+
+    assert request.headers["anthropic-beta"] == "clear_thinking_20251015"
+    assert request.query_params["beta"] == "true"
+
+
+@pytest.mark.anyio
+async def test_user_api_key_auth_strips_anthropic_beta_metadata_for_non_anthropic_route(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "tracecat.agent.gateway.verify_llm_token",
+        lambda _: SimpleNamespace(
+            workspace_id="00000000-0000-0000-0000-000000000001",
+            organization_id="00000000-0000-0000-0000-000000000002",
+            session_id="00000000-0000-0000-0000-000000000003",
+            catalog_id=None,
+            use_workspace_credentials=False,
+            model="claude-sonnet-4",
+            provider="anthropic",
+            base_url=None,
+            model_settings={},
+            routes={
+                "openai/gpt-5": SimpleNamespace(
+                    model="gpt-5",
+                    provider="openai",
+                    catalog_id=None,
+                    base_url=None,
+                    model_settings={},
+                    use_workspace_credentials=False,
+                )
+            },
+        ),
+    )
+    request = _make_request(
+        "/v1/messages",
+        headers=[(b"anthropic-beta", b"clear_thinking_20251015")],
+        query_string=b"beta=true",
+        json_body={"model": "openai/gpt-5"},
+    )
+
+    await user_api_key_auth(request, api_key="valid-token")
+
+    assert request.headers.get("anthropic-beta") is None
+    assert "beta" not in request.query_params
 
 
 @pytest.mark.anyio

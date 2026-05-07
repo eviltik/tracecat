@@ -97,6 +97,18 @@ def _strip_non_anthropic_beta_payload_fields(data: dict) -> None:
     data.pop("output_format", None)
 
 
+async def _request_model(request: Request) -> str | None:
+    """Return the incoming LiteLLM request model when it is available."""
+    try:
+        body = await request.json()
+    except (RuntimeError, ValueError):
+        return None
+    if not isinstance(body, dict):
+        return None
+    model = body.get("model")
+    return model if isinstance(model, str) else None
+
+
 _credential_cache: Any = Cache(
     Cache.MEMORY,
     ttl=app_config.TRACECAT__LLM_GATEWAY_CREDENTIAL_CACHE_TTL_SECONDS,
@@ -304,7 +316,14 @@ async def user_api_key_auth(request: Request, api_key: str | None) -> UserAPIKey
             code=401,
         ) from exc
 
-    if claims.provider != "anthropic":
+    incoming_model = await _request_model(request)
+    selected_route = (
+        getattr(claims, "routes", {}).get(incoming_model)
+        if incoming_model is not None
+        else None
+    )
+    selected_provider = selected_route.provider if selected_route else claims.provider
+    if selected_provider != "anthropic":
         _strip_non_anthropic_beta_request_metadata(request)
 
     metadata: LLMTokenAuthMetadata = {
