@@ -29,31 +29,23 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar"
 import { useAuthActions } from "@/hooks/use-auth"
-import { useAppInfo } from "@/lib/hooks"
 
 export function AdminSidebar({
   ...props
 }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname()
   const { logout } = useAuthActions()
-  const { appInfo } = useAppInfo()
-  const multiTenantEnabled = appInfo?.ee_multi_tenant ?? true
-
   const handleLogout = async () => {
     await logout()
   }
 
   const navPlatform = [
-    ...(multiTenantEnabled
-      ? [
-          {
-            title: "Organizations",
-            url: "/admin/organizations",
-            icon: BuildingIcon,
-            isActive: pathname?.includes("/admin/organizations"),
-          },
-        ]
-      : []),
+    {
+      title: "Organizations",
+      url: "/admin/organizations",
+      icon: BuildingIcon,
+      isActive: pathname?.includes("/admin/organizations"),
+    },
     {
       title: "Users",
       url: "/admin/users",
@@ -98,7 +90,7 @@ export function AdminSidebar({
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton asChild>
-              <Link href="/admin" className="text-muted-foreground">
+              <Link href="/workspaces" className="text-muted-foreground">
                 <ChevronLeftIcon />
                 <span>Admin console</span>
               </Link>

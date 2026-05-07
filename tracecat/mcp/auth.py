@@ -9,12 +9,13 @@ import time
 import uuid
 from base64 import urlsafe_b64decode
 from collections.abc import Mapping, Sequence
+from datetime import UTC, datetime
 from typing import Any, cast
 from urllib.parse import parse_qs, urlparse
 
 import httpx
 from cryptography.fernet import Fernet
-from fastmcp.server.auth import AccessToken, AuthProvider
+from fastmcp.server.auth import AccessToken, AuthProvider, MultiAuth, TokenVerifier
 from fastmcp.server.auth.cimd import CIMDDocument
 from fastmcp.server.auth.oauth_proxy.models import ProxyDCRClient
 from fastmcp.server.auth.oidc_proxy import OIDCProxy
@@ -69,7 +70,8 @@ from tracecat.mcp.oidc.features import (
     OFFLINE_ACCESS_SCOPE,
     get_supported_scopes,
 )
-from tracecat.organization.management import get_default_organization_id
+from tracecat.mcp.personal_access_tokens.constants import MCP_PAT_PREFIX
+from tracecat.mcp.personal_access_tokens.service import verify_mcp_personal_access_token
 
 
 class MCPTokenIdentity(BaseModel):
@@ -364,6 +366,46 @@ def _extract_fastmcp_scopes(fastmcp_claims: Mapping[str, object]) -> list[str] |
     ):
         return [scope for scope in raw_scope if scope]
     return None
+
+
+def _expires_at_timestamp(expires_at: datetime | None) -> int | None:
+    if expires_at is None:
+        return None
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=UTC)
+    else:
+        expires_at = expires_at.astimezone(UTC)
+    return int(expires_at.timestamp())
+
+
+class MCPPATTokenVerifier(TokenVerifier):
+    """FastMCP token verifier for workspace-scoped MCP personal access tokens."""
+
+    async def verify_token(self, token: str) -> AccessToken | None:
+        if not token.startswith(MCP_PAT_PREFIX):
+            return None
+
+        identity = await verify_mcp_personal_access_token(token)
+        if identity is None:
+            return None
+
+        client_id = f"mcp_pat:{identity.key_id}"
+        claims: dict[str, object] = {
+            "sub": str(identity.user_id),
+            "email": identity.email,
+            "organization_id": str(identity.organization_id),
+            "organization_ids": [str(identity.organization_id)],
+            "client_id": client_id,
+            "workspace_id": str(identity.workspace_id),
+            "workspace_ids": [str(identity.workspace_id)],
+        }
+        return AccessToken(
+            token=token,
+            client_id=client_id,
+            scopes=[],
+            expires_at=_expires_at_timestamp(identity.expires_at),
+            claims=claims,
+        )
 
 
 async def _fetch_userinfo_claims(
@@ -1058,7 +1100,7 @@ def _create_oidc_auth() -> OIDCProxy:
 
 def create_mcp_auth() -> AuthProvider:
     """Build the auth provider for external MCP."""
-    return _create_oidc_auth()
+    return MultiAuth(server=_create_oidc_auth(), verifiers=[MCPPATTokenVerifier()])
 
 
 async def resolve_user_by_email(email: str) -> User:
@@ -1145,14 +1187,6 @@ async def resolve_workspace_membership(
         return WorkspaceRole.EDITOR
 
 
-def _raise_if_multi_tenant_superuser(user: User) -> None:
-    """Block platform superusers from tenant MCP context in multi-tenant mode."""
-    if config.TRACECAT__EE_MULTI_TENANT and user.is_superuser:
-        raise ValueError(
-            "Platform superusers cannot access tenant MCP context in multi-tenant mode"
-        )
-
-
 async def resolve_role(email: str, workspace_id: WorkspaceID) -> Role:
     """Resolve a user's Role for a given workspace from their OAuth email.
 
@@ -1160,10 +1194,8 @@ async def resolve_role(email: str, workspace_id: WorkspaceID) -> Role:
 
     Org admins/owners (users with ``org:workspace:read`` scope) bypass the
     workspace-level membership check, matching the behaviour of the main API.
-    Single-tenant platform superusers also bypass direct membership checks.
     """
     user = await resolve_user_by_email(email)
-    _raise_if_multi_tenant_superuser(user)
 
     org_id = await resolve_workspace_org(workspace_id)
 
@@ -1174,12 +1206,11 @@ async def resolve_role(email: str, workspace_id: WorkspaceID) -> Role:
         workspace_id=workspace_id,
         organization_id=org_id,
         service_id="tracecat-mcp",
-        is_platform_superuser=user.is_superuser,
     )
     scopes = await compute_effective_scopes(role)
 
-    # Platform superusers and org admins/owners can access any workspace.
-    if not user.is_superuser and not has_scope(scopes, "org:workspace:read"):
+    # Org admins/owners can access any workspace in their org.
+    if not has_scope(scopes, "org:workspace:read"):
         await resolve_workspace_membership(user.id, workspace_id)
 
     role = role.model_copy(update={"scopes": scopes})
@@ -1195,13 +1226,11 @@ async def list_user_workspaces(
 ) -> list[dict[str, str]]:
     """List workspaces accessible to the user.
 
-    Users with ``org:workspace:read`` scope (org admins/owners) or platform
-    superusers in single-tenant mode see every workspace in their
-    organization(s). Other users see only workspaces where they have an explicit
-    Membership row.
+    Users with ``org:workspace:read`` scope (org admins/owners) see every
+    workspace in their organization(s). Other users see only workspaces where
+    they have an explicit Membership row.
     """
     user = await resolve_user_by_email(email)
-    _raise_if_multi_tenant_superuser(user)
 
     async with get_async_session_bypass_rls_context_manager() as session:
 
@@ -1222,17 +1251,6 @@ async def list_user_workspaces(
                 member_result.tuples().all(),
                 key=lambda item: (item[1], str(item[0])),
             )
-
-        if user.is_superuser:
-            stmt = select(Workspace.id, Workspace.name)
-            if organization_ids:
-                stmt = stmt.where(Workspace.organization_id.in_(organization_ids))
-            stmt = stmt.order_by(Workspace.name.asc(), Workspace.id.asc())
-            result = await session.execute(stmt)
-            return [
-                {"id": str(workspace_id), "name": workspace_name}
-                for workspace_id, workspace_name in result.tuples().all()
-            ]
 
         # Resolve the user's organization(s)
         org_stmt = select(OrganizationMembership.organization_id).where(
@@ -1260,7 +1278,6 @@ async def list_user_workspaces(
                 organization_id=oid,
                 workspace_id=None,
                 service_id="tracecat-mcp",
-                is_platform_superuser=user.is_superuser,
             )
             scopes = await compute_effective_scopes(role)
             if has_scope(scopes, "org:workspace:read"):
@@ -1306,8 +1323,12 @@ async def list_user_workspaces(
 
 async def resolve_role_for_request(workspace_id: WorkspaceID) -> Role:
     """Resolve caller role for a workspace."""
-    email = get_email_from_token()
-    return await resolve_role(email, workspace_id)
+    identity = get_token_identity()
+    if identity.email is None:
+        raise ValueError("Token does not contain an email claim")
+    if identity.workspace_ids and workspace_id not in identity.workspace_ids:
+        raise ValueError("Token is not scoped to the requested workspace")
+    return await resolve_role(identity.email, workspace_id)
 
 
 async def resolve_org_role_for_request() -> Role:
@@ -1319,27 +1340,25 @@ async def resolve_org_role_for_request() -> Role:
     an ``organization_id`` claim or ``org:<uuid>`` scope, that scoping is
     intersected with the user's memberships before the ambiguity check, so a
     single-org-scoped token resolves cleanly even when the user belongs to
-    multiple orgs overall. Single-tenant platform superusers fall back to
-    the default organization (matching ``_resolve_org_for_superuser``) so
-    they can use org-scoped tools without an explicit OrganizationMembership.
+    multiple orgs overall.
     """
     identity = get_token_identity()
     if identity.email is None:
         raise ValueError("Token does not contain an email claim")
+    if identity.workspace_ids:
+        raise ValueError(
+            "Workspace-scoped tokens cannot access organization-level tools"
+        )
 
     user = await resolve_user_by_email(identity.email)
-    _raise_if_multi_tenant_superuser(user)
 
     async with get_async_session_bypass_rls_context_manager() as session:
-        if user.is_superuser and not config.TRACECAT__EE_MULTI_TENANT:
-            org_ids = {await get_default_organization_id(session)}
-        else:
-            result = await session.execute(
-                select(OrganizationMembership.organization_id).where(
-                    OrganizationMembership.user_id == user.id
-                )
+        result = await session.execute(
+            select(OrganizationMembership.organization_id).where(
+                OrganizationMembership.user_id == user.id
             )
-            org_ids = {row[0] for row in result.all()}
+        )
+        org_ids = {row[0] for row in result.all()}
 
     if identity.organization_ids:
         org_ids &= identity.organization_ids
@@ -1365,7 +1384,6 @@ async def resolve_org_role_for_request() -> Role:
         workspace_id=None,
         organization_id=organization_id,
         service_id="tracecat-mcp",
-        is_platform_superuser=user.is_superuser,
     )
     scopes = await compute_effective_scopes(role)
     role = role.model_copy(update={"scopes": scopes})
@@ -1379,10 +1397,17 @@ async def list_workspaces_for_request() -> list[dict[str, str]]:
     if identity.email is None:
         raise ValueError("Token does not contain an email claim")
     scoped_org_ids = identity.organization_ids or None
-    return await list_user_workspaces(
+    workspaces = await list_user_workspaces(
         identity.email,
         organization_ids=scoped_org_ids,
     )
+    if not identity.workspace_ids:
+        return workspaces
+    return [
+        workspace
+        for workspace in workspaces
+        if _coerce_uuid(workspace["id"]) in identity.workspace_ids
+    ]
 
 
 def get_email_from_token() -> str:

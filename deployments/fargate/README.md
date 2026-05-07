@@ -69,7 +69,7 @@ export TF_VAR_hosted_zone_id=Z1234567890
 export TF_VAR_tracecat_db_encryption_key_arn=arn:aws:secretsmanager:...
 export TF_VAR_tracecat_service_key_arn=arn:aws:secretsmanager:...
 export TF_VAR_tracecat_signing_secret_arn=arn:aws:secretsmanager:...
-export TF_VAR_tracecat_image_tag=1.0.0-beta.46
+export TF_VAR_tracecat_image_tag=1.0.0-beta.47
 
 terraform apply
 ```
@@ -81,6 +81,17 @@ For Terraform Cloud direct OIDC runs, the target account and role come from `TFC
 - API task startup includes an internal migrations init container.
 - API container starts only if migrations succeed (`dependsOn: SUCCESS`).
 - `worker`, `executor`, and `agent-executor` are ordered after API in Terraform, so service updates do not proceed past API if migrations fail.
+
+By default, the migrations init container uses the same backend image repository
+and tag as the application. Set these optional variables to decouple it:
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `tracecat_migrations_image` | `tracecat_image` | Optional migrations image repository override |
+| `tracecat_migrations_image_tag` | `tracecat_image_tag` | Optional migrations image tag override |
+
+For app-only rollbacks, keep the migrations image on a version that understands
+the current Alembic database revision while rolling back the app images.
 
 ## Useful outputs
 

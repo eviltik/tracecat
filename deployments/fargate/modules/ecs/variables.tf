@@ -48,20 +48,20 @@ variable "redis_default_user_id" {
 
 variable "waf_attachments_endpoint_pattern_name" {
   type        = string
-  description = "WAF regex pattern set name for attachments endpoint matching."
-  default     = "attachments-endpoint-pattern"
+  description = "WAF regex pattern set name for attachments endpoint matching. When null, defaults to \"$${name_prefix}-attachments-endpoint-pattern\"."
+  default     = null
 }
 
 variable "waf_mcp_oauth_endpoints_pattern_name" {
   type        = string
-  description = "WAF regex pattern set name for MCP OAuth endpoint matching."
-  default     = "mcp-oauth-endpoints-pattern"
+  description = "WAF regex pattern set name for MCP OAuth endpoint matching. When null, defaults to \"$${name_prefix}-mcp-oauth-endpoints-pattern\"."
+  default     = null
 }
 
 variable "waf_mcp_public_endpoint_pattern_name" {
   type        = string
-  description = "WAF regex pattern set name for MCP public endpoint matching."
-  default     = "mcp-public-endpoint-pattern"
+  description = "WAF regex pattern set name for MCP public endpoint matching. When null, defaults to \"$${name_prefix}-mcp-public-endpoint-pattern\"."
+  default     = null
 }
 
 ### Networking
@@ -167,7 +167,19 @@ variable "tracecat_ui_image" {
 
 variable "tracecat_image_tag" {
   type    = string
-  default = "1.0.0-beta.46"
+  default = "1.0.0-beta.47"
+}
+
+variable "tracecat_migrations_image" {
+  type        = string
+  description = "Docker image repository for the Tracecat migrations init container. Defaults to tracecat_image."
+  default     = null
+}
+
+variable "tracecat_migrations_image_tag" {
+  type        = string
+  description = "Docker image tag for the Tracecat migrations init container. Defaults to tracecat_image_tag."
+  default     = null
 }
 
 variable "temporal_server_image" {
