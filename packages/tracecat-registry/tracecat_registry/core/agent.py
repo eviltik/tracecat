@@ -231,6 +231,12 @@ async def agent(
         Doc("User prompt to the agent."),
         TextArea(),
     ],
+    mcp_integrations: Annotated[
+        list[str] | None,
+        Doc("Saved MCP integrations to include in the agent."),
+        Field(title="MCP Integrations"),
+        MCPIntegration(multiple=True),
+    ] = None,
     model: Annotated[
         ModelSelection | None,
         Doc("Model to use. Pick from the list of models enabled for this workspace."),
@@ -256,11 +262,6 @@ async def agent(
         list[str] | None,
         Doc("Actions (e.g. 'tools.slack.post_message') to include in the agent."),
         ActionType(multiple=True),
-    ] = None,
-    mcp_integrations: Annotated[
-        list[str] | None,
-        Doc("Saved MCP integration IDs to include in the agent."),
-        MCPIntegration(multiple=True),
     ] = None,
     instructions: Annotated[
         str | None, Doc("Instructions for the agent."), TextArea()

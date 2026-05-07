@@ -38,14 +38,11 @@ with workflow.unsafe.imports_passed_through():
     from tracecat.agent.aliases import build_agent_alias
     from tracecat.agent.preset.activities import (
         ResolveAgentPresetVersionRefActivityInput,
-        ResolveMCPIntegrationsActivityInput,
         resolve_agent_preset_version_ref_activity,
-        resolve_mcp_integrations_activity,
     )
     from tracecat.agent.schemas import RunAgentArgs
     from tracecat.agent.session.types import AgentSessionEntity
     from tracecat.agent.types import AgentConfig
-    from tracecat.agent.workflow_config import mcp_servers_from_payload
     from tracecat.concurrency import cooperative
     from tracecat.contexts import (
         ctx_interaction,
@@ -938,18 +935,6 @@ class DSLWorkflow:
                         wf_info, task.ref
                     )
                     session_id = action_args.session_id or workflow.uuid4()
-                    mcp_servers = None
-                    if action_args.mcp_integrations:
-                        mcp_server_payloads = await workflow.execute_activity(
-                            resolve_mcp_integrations_activity,
-                            ResolveMCPIntegrationsActivityInput(
-                                role=self.role,
-                                mcp_integrations=action_args.mcp_integrations,
-                            ),
-                            start_to_close_timeout=timedelta(seconds=60),
-                            retry_policy=RETRY_POLICIES["activity:fail_fast"],
-                        )
-                        mcp_servers = mcp_servers_from_payload(mcp_server_payloads)
                     arg = AgentWorkflowArgs(
                         role=self.role,
                         agent_args=RunAgentArgs(
@@ -967,7 +952,7 @@ class DSLWorkflow:
                                 base_url=action_args.base_url,
                                 actions=action_args.actions,
                                 tool_approvals=action_args.tool_approvals,
-                                mcp_servers=mcp_servers,
+                                mcp_integrations=action_args.mcp_integrations,
                             ),
                             max_requests=action_args.max_requests,
                             max_tool_calls=action_args.max_tool_calls,

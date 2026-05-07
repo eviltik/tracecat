@@ -17,15 +17,10 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tracecat.agent.preset.activities import (
-    ResolveMCPIntegrationsActivityInput,
-    resolve_mcp_integrations_activity,
-)
 from tracecat.agent.preset.service import AgentPresetService
 from tracecat.auth.types import Role
 from tracecat.authz.scopes import ADMIN_SCOPES
 from tracecat.db.models import AgentPreset, MCPIntegration, OAuthIntegration
-from tracecat.exceptions import TracecatValidationError
 from tracecat.integrations.enums import MCPAuthType, OAuthGrantType
 from tracecat.integrations.providers.base import (
     MCPAuthProvider,
@@ -288,59 +283,6 @@ class TestMCPIntegrationCRUD:
         headers = resolved[0].get("headers")
         assert isinstance(headers, dict)
         assert headers == {"Authorization": "Bearer test_access_token"}
-
-    async def test_resolve_mcp_integrations_activity_resolves_http_and_stdio(
-        self,
-        integration_service: IntegrationService,
-    ) -> None:
-        http = await integration_service.create_mcp_integration(
-            params=MCPHttpIntegrationCreate(
-                name="HTTP MCP",
-                server_uri="https://api.example.com/mcp",
-                auth_type=MCPAuthType.NONE,
-            )
-        )
-        stdio = await integration_service.create_mcp_integration(
-            params=MCPStdioIntegrationCreate(
-                name="Stdio MCP",
-                stdio_command="node",
-                stdio_args=["server.js"],
-            )
-        )
-        await integration_service.session.commit()
-
-        resolved = await resolve_mcp_integrations_activity(
-            ResolveMCPIntegrationsActivityInput(
-                role=integration_service.role,
-                mcp_integrations=[str(http.id), str(stdio.id)],
-            )
-        )
-
-        assert resolved is not None
-        assert [server.type for server in resolved] == ["http", "stdio"]
-        assert resolved[0].name == "HTTP MCP"
-        assert resolved[1].name == "stdio-mcp"
-
-    async def test_resolve_mcp_integrations_activity_rejects_invalid_ids(
-        self,
-        integration_service: IntegrationService,
-    ) -> None:
-        with pytest.raises(TracecatValidationError, match="Invalid MCP integration"):
-            await resolve_mcp_integrations_activity(
-                ResolveMCPIntegrationsActivityInput(
-                    role=integration_service.role,
-                    mcp_integrations=["not-a-uuid"],
-                )
-            )
-
-        missing_id = uuid.uuid4()
-        with pytest.raises(TracecatValidationError, match="not found"):
-            await resolve_mcp_integrations_activity(
-                ResolveMCPIntegrationsActivityInput(
-                    role=integration_service.role,
-                    mcp_integrations=[str(missing_id)],
-                )
-            )
 
     async def test_get_mcp_integration_not_found(
         self,

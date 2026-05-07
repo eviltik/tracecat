@@ -450,6 +450,7 @@ class DurableAgentWorkflow:
                         actions=cfg.actions,
                     ),
                     tool_approvals=cfg.tool_approvals,
+                    mcp_integrations=cfg.mcp_integrations,
                     mcp_servers=cfg.mcp_servers,
                     internal_tool_context=internal_tool_context,
                 ),
@@ -491,8 +492,9 @@ class DurableAgentWorkflow:
                 is_fork=is_fork,
             )
 
-        # Mint tokens for MCP server and LLM gateway auth
-        # These tokens are opaque to the jailed runtime - it cannot decode them
+        # Mint tokens for MCP server and LLM gateway auth. Saved MCP integration
+        # credentials are not included here; run_agent_activity re-mints MCP auth
+        # when saved integrations are configured.
         info = workflow.info()
         mcp_auth_token = mint_mcp_token(
             workspace_id=self.workspace_id,
@@ -527,12 +529,12 @@ class DurableAgentWorkflow:
             mcp_auth_token=mcp_auth_token,
             llm_gateway_auth_token=llm_gateway_auth_token,
             allowed_actions=allowed_actions,
+            allowed_internal_tools=allowed_internal_tools,
+            internal_tool_context=internal_tool_context,
             sdk_session_id=self._sdk_session_id,
             sdk_session_data=self._sdk_session_data,
             is_fork=is_fork,
         )
-
-        info = workflow.info()
 
         # Run the executor activity
         while True:
@@ -618,6 +620,8 @@ class DurableAgentWorkflow:
                     mcp_auth_token=mcp_auth_token,
                     llm_gateway_auth_token=llm_gateway_auth_token,
                     allowed_actions=allowed_actions,
+                    allowed_internal_tools=allowed_internal_tools,
+                    internal_tool_context=internal_tool_context,
                     sdk_session_id=self._sdk_session_id,
                     sdk_session_data=self._sdk_session_data,
                     is_approval_continuation=True,

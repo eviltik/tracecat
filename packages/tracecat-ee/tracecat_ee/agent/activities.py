@@ -21,6 +21,7 @@ from tracecat.agent.mcp.internal_tools import (
     BUILDER_INTERNAL_TOOL_NAMES,
     get_builder_internal_tool_definitions,
 )
+from tracecat.agent.preset.service import AgentPresetService
 from tracecat.agent.schemas import ToolFilters
 from tracecat.agent.stream.connector import AgentStream
 from tracecat.agent.tokens import InternalToolContext, UserMCPServerClaim
@@ -40,6 +41,8 @@ class BuildToolDefsArgs(BaseModel):
     role: Role
     tool_filters: ToolFilters
     tool_approvals: dict[str, bool] | None = None
+    mcp_integrations: list[str] | None = None
+    """Saved MCP integration IDs to resolve inside this activity."""
     mcp_servers: list[MCPServerConfig] | None = None
     """User-defined MCP server configurations to discover tools from."""
     internal_tool_context: InternalToolContext | None = None
@@ -108,7 +111,7 @@ class AgentActivities:
 
         # Runtime guard for add-on-gated agent flows. This ensures direct
         # workflow execution paths still enforce entitlements.
-        if args.tool_approvals or args.mcp_servers:
+        if args.tool_approvals or args.mcp_servers or args.mcp_integrations:
             if args.role.organization_id is None:
                 raise ValueError(
                     "Role must have organization_id to validate entitlements"
@@ -168,13 +171,24 @@ class AgentActivities:
                 tools=list(internal_defs.keys()),
             )
 
-        # Discover user MCP tools if configured
+        mcp_servers_for_discovery = list(args.mcp_servers or [])
+        if args.mcp_integrations:
+            async with AgentPresetService.with_session(role=args.role) as service:
+                await service.validate_mcp_integrations(args.mcp_integrations)
+                resolved_servers = await service.resolve_mcp_integrations(
+                    args.mcp_integrations
+                )
+            mcp_servers_for_discovery.extend(resolved_servers or [])
+
+        # Discover user MCP tools if configured. Saved integration configs are
+        # intentionally kept local to this activity so decrypted credentials do
+        # not cross Temporal workflow/activity result boundaries.
         user_mcp_claims: list[UserMCPServerClaim] | None = None
-        if args.mcp_servers:
+        if mcp_servers_for_discovery:
             from tracecat.agent.mcp.user_client import discover_user_mcp_tools
 
             http_servers = [
-                cfg for cfg in args.mcp_servers if self._is_http_server(cfg)
+                cfg for cfg in mcp_servers_for_discovery if self._is_http_server(cfg)
             ]
             if not http_servers:
                 logger.info("No HTTP MCP servers configured for discovery")
@@ -186,17 +200,24 @@ class AgentActivities:
                 for tool_name, tool_def in user_mcp_tools.items():
                     defs[tool_name] = tool_def
 
-                # Build claims for JWT (headers NOT resolved here - done by caller)
-                user_mcp_claims = [
-                    UserMCPServerClaim(
-                        name=cfg["name"],
-                        url=cfg["url"],
-                        transport=cfg.get("transport", "http"),
-                        headers=cfg.get("headers", {}),
-                        timeout=cfg.get("timeout"),
-                    )
-                    for cfg in http_servers
-                ]
+                # Build claims for legacy direct mcp_servers only. Saved MCP
+                # integrations are re-resolved and tokenized inside
+                # run_agent_activity so decrypted headers/env never appear in
+                # this activity result.
+                if args.mcp_servers:
+                    direct_http_servers = [
+                        cfg for cfg in args.mcp_servers if self._is_http_server(cfg)
+                    ]
+                    user_mcp_claims = [
+                        UserMCPServerClaim(
+                            name=cfg["name"],
+                            url=cfg["url"],
+                            transport=cfg.get("transport", "http"),
+                            headers=cfg.get("headers", {}),
+                            timeout=cfg.get("timeout"),
+                        )
+                        for cfg in direct_http_servers
+                    ]
 
                 logger.info(
                     "Discovered user MCP tools",

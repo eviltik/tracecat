@@ -136,6 +136,17 @@ function normalizeOptionalExpression(
   return trimmed
 }
 
+function getSchemaFieldLabel(fieldName: string, fieldDefn: unknown): string {
+  if (
+    isTracecatJsonSchema(fieldDefn) &&
+    typeof fieldDefn.title === "string" &&
+    fieldDefn.title.trim()
+  ) {
+    return fieldDefn.title
+  }
+  return fieldName.replaceAll("_", " ").replace(/^\w/, (c) => c.toUpperCase())
+}
+
 // These are YAML strings
 const actionFormSchema = z.object({
   title: z
@@ -1054,9 +1065,10 @@ function ActionPanelContent({
                           {/* Required fields - always shown */}
                           {requiredFields.map(([fieldName, fieldDefn]) => {
                             const fullFieldName = `inputs.${fieldName}`
-                            const label = fieldName
-                              .replaceAll("_", " ")
-                              .replace(/^\w/, (c) => c.toUpperCase())
+                            const label = getSchemaFieldLabel(
+                              fieldName,
+                              fieldDefn
+                            )
                             if (!isTracecatJsonSchema(fieldDefn)) {
                               // For non-TracecatJsonSchema, we can't extract type information
                               return (
@@ -1086,9 +1098,10 @@ function ActionPanelContent({
                             )
                             .map(([fieldName, fieldDefn]) => {
                               const fullFieldName = `inputs.${fieldName}`
-                              const label = fieldName
-                                .replaceAll("_", " ")
-                                .replace(/^\w/, (c) => c.toUpperCase())
+                              const label = getSchemaFieldLabel(
+                                fieldName,
+                                fieldDefn
+                              )
                               if (!isTracecatJsonSchema(fieldDefn)) {
                                 // For non-TracecatJsonSchema, we can't extract type information
                                 return (
@@ -1131,9 +1144,10 @@ function ActionPanelContent({
                                 >
                                   {optionalFields.map(
                                     ([fieldName, fieldDefn]) => {
-                                      const label = fieldName
-                                        .replaceAll("_", " ")
-                                        .replace(/^\w/, (c) => c.toUpperCase())
+                                      const label = getSchemaFieldLabel(
+                                        fieldName,
+                                        fieldDefn
+                                      )
                                       const isVisible =
                                         visibleOptionalFields.has(fieldName)
                                       const description = isTracecatJsonSchema(

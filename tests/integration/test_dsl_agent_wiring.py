@@ -18,7 +18,6 @@ from tracecat.agent.executor.activity import (
     AgentExecutorInput,
     AgentExecutorResult,
 )
-from tracecat.agent.preset.activities import ResolveMCPIntegrationsActivityInput
 from tracecat.agent.session.activities import (
     CreateSessionInput,
     CreateSessionResult,
@@ -31,7 +30,6 @@ from tracecat.agent.worker import (
 from tracecat.agent.worker import (
     new_sandbox_runner as new_agent_sandbox_runner,
 )
-from tracecat.agent.workflow_schemas import MCPHttpServerConfigPayload
 from tracecat.auth.types import Role
 from tracecat.dsl.common import RETRY_POLICIES, DSLEntrypoint, DSLInput, DSLRunArgs
 from tracecat.dsl.schemas import ActionStatement
@@ -131,26 +129,6 @@ def create_mock_build_tool_definitions_activity(
         )
 
     return mock_build_tool_definitions
-
-
-def create_mock_resolve_mcp_integrations_activity(
-    captured_inputs: list[ResolveMCPIntegrationsActivityInput] | None = None,
-) -> Callable[..., Any]:
-    @activity.defn(name="resolve_mcp_integrations_activity")
-    async def mock_resolve_mcp_integrations(
-        args: ResolveMCPIntegrationsActivityInput,
-    ) -> list[MCPHttpServerConfigPayload]:
-        if captured_inputs is not None:
-            captured_inputs.append(args)
-        return [
-            MCPHttpServerConfigPayload(
-                type="http",
-                name="HTTP MCP",
-                url="https://api.example.com/mcp",
-            )
-        ]
-
-    return mock_resolve_mcp_integrations
 
 
 def create_mock_run_agent_activity(*, output: str) -> Callable[..., Any]:
@@ -264,7 +242,6 @@ class TestDSLAgentWiring:
         test_worker_factory: Callable[..., Worker],
         agent_worker_factory: Callable[..., Worker],
     ) -> None:
-        captured_resolver_inputs: list[ResolveMCPIntegrationsActivityInput] = []
         captured_tool_inputs: list[BuildToolDefsArgs] = []
         integration_id = "11111111-1111-1111-1111-111111111111"
 
@@ -277,12 +254,6 @@ class TestDSLAgentWiring:
             agent_activities = _replace_activity(agent_activities, replacement)
         agent_activities.append(
             create_mock_run_agent_activity(output="dsl-agent-mcp-wired")
-        )
-
-        dsl_activities = list(get_dsl_worker_activities())
-        dsl_activities = _replace_activity(
-            dsl_activities,
-            create_mock_resolve_mcp_integrations_activity(captured_resolver_inputs),
         )
 
         dsl = DSLInput(
@@ -307,7 +278,7 @@ class TestDSLAgentWiring:
 
         async with test_worker_factory(
             temporal_client,
-            activities=dsl_activities,
+            activities=list(get_dsl_worker_activities()),
         ):
             async with agent_worker_factory(
                 temporal_client,
@@ -329,14 +300,8 @@ class TestDSLAgentWiring:
 
         data = await to_data(result)
         assert data["output"] == "dsl-agent-mcp-wired"
-        assert captured_resolver_inputs[0].mcp_integrations == [integration_id]
-        assert captured_tool_inputs[0].mcp_servers == [
-            {
-                "type": "http",
-                "name": "HTTP MCP",
-                "url": "https://api.example.com/mcp",
-            }
-        ]
+        assert captured_tool_inputs[0].mcp_integrations == [integration_id]
+        assert captured_tool_inputs[0].mcp_servers is None
 
     @pytest.mark.anyio
     @pytest.mark.integration

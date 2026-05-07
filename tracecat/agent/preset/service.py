@@ -1405,7 +1405,6 @@ class AgentPresetService(BaseWorkspaceService):
     async def _version_to_agent_config(
         self, version: AgentPresetVersion
     ) -> AgentConfig:
-        mcp_servers = await self.resolve_mcp_integrations(version.mcp_integrations)
         model_settings: dict[str, Any] = {}
         resolved_skills = await self.skills.get_resolved_skill_refs_for_preset_version(
             version.id
@@ -1427,7 +1426,7 @@ class AgentPresetService(BaseWorkspaceService):
                 },
             )
         # Only disable parallel tool calls if tools will be present
-        if version.actions or mcp_servers:
+        if version.actions or version.mcp_integrations:
             model_settings["parallel_tool_calls"] = False
         return AgentConfig(
             model_name=version.model_name,
@@ -1439,7 +1438,7 @@ class AgentPresetService(BaseWorkspaceService):
             actions=version.actions,
             namespaces=version.namespaces,
             tool_approvals=version.tool_approvals,
-            mcp_servers=mcp_servers,
+            mcp_integrations=version.mcp_integrations,
             retries=version.retries,
             model_settings=model_settings,
             enable_thinking=version.enable_thinking,

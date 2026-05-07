@@ -1943,7 +1943,8 @@ export const $AgentPresetCreate = {
           type: "null",
         },
       ],
-      title: "Mcp Integrations",
+      title: "MCP Integrations",
+      description: "Saved MCP integrations attached to the agent preset.",
     },
     retries: {
       type: "integer",
@@ -2124,7 +2125,8 @@ export const $AgentPresetRead = {
           type: "null",
         },
       ],
-      title: "Mcp Integrations",
+      title: "MCP Integrations",
+      description: "Saved MCP integrations attached to the agent preset.",
     },
     retries: {
       type: "integer",
@@ -2560,7 +2562,8 @@ export const $AgentPresetUpdate = {
           type: "null",
         },
       ],
-      title: "Mcp Integrations",
+      title: "MCP Integrations",
+      description: "Saved MCP integrations attached to the agent preset.",
     },
     retries: {
       anyOf: [
@@ -2819,7 +2822,8 @@ export const $AgentPresetVersionRead = {
           type: "null",
         },
       ],
-      title: "Mcp Integrations",
+      title: "MCP Integrations",
+      description: "Saved MCP integrations attached to the agent preset.",
     },
     retries: {
       type: "integer",

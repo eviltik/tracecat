@@ -22,7 +22,7 @@ import type { ActionType, RegistryActionReadMinimal } from "@/client/types.gen"
 import { CodeEditor } from "@/components/editor/codemirror/code-editor"
 import { YamlStyledEditor } from "@/components/editor/codemirror/yaml-editor"
 import { ExpressionInput } from "@/components/editor/expression-input"
-import { getIcon, ProviderIcon } from "@/components/icons"
+import { getIcon, ProviderIcon, providerIcons } from "@/components/icons"
 import {
   LockedFeatureChip,
   LockedFeatureModal,
@@ -806,14 +806,24 @@ export function MCPIntegrationField({
 
   const suggestions = useMemo<Suggestion[]>(() => {
     return (mcpIntegrations ?? [])
-      .map((integration) => ({
-        id: integration.id,
-        label: integration.name,
-        value: integration.id,
-        description: integration.description ?? integration.slug,
-        group: integration.server_type,
-        icon: <WorkflowIcon className="mx-1 size-3 text-muted-foreground" />,
-      }))
+      .map((integration) => {
+        const providerId = getMcpProviderIconId(integration.slug)
+        return {
+          id: integration.id,
+          label: integration.name,
+          value: integration.id,
+          description: integration.description ?? integration.slug,
+          group: integration.server_type,
+          icon: providerId ? (
+            <ProviderIcon
+              providerId={providerId}
+              className="mx-1 size-3 !bg-transparent !p-0"
+            />
+          ) : (
+            <WorkflowIcon className="mx-1 size-4 text-muted-foreground" />
+          ),
+        }
+      })
       .sort((a, b) => a.label.localeCompare(b.label))
   }, [mcpIntegrations])
 
@@ -836,6 +846,46 @@ export function MCPIntegrationField({
       disabled={!workspaceId}
     />
   )
+}
+
+function getMcpProviderIconId(slug: string): string | undefined {
+  const slugMap: Record<string, string> = {
+    github: "github_mcp",
+    "github-copilot": "github_mcp",
+    jira: "jira_mcp",
+    linear: "linear_mcp",
+    notion: "notion_mcp",
+    runreveal: "runreveal_mcp",
+    "secure-annex": "secureannex_mcp",
+    secureannex: "secureannex_mcp",
+    sentry: "sentry_mcp",
+    wiz: "wiz_mcp",
+  }
+
+  const normalized = slug.toLowerCase()
+  const mapped = slugMap[normalized] ?? normalizeMcpProviderId(normalized)
+  if (mapped && mapped in providerIcons) {
+    return mapped
+  }
+  return undefined
+}
+
+function normalizeMcpProviderId(normalizedSlug: string): string | undefined {
+  const mcpMatch = normalizedSlug.match(/^(.*?)(?:[_-]?mcp)$/)
+  if (mcpMatch?.[1]) {
+    const compactBase = mcpMatch[1].replace(/[^a-z0-9]/g, "")
+    if (compactBase) {
+      return `${compactBase}_mcp`
+    }
+  }
+
+  if (normalizedSlug.endsWith("_mcp")) {
+    return normalizedSlug
+  }
+  if (normalizedSlug.endsWith("-mcp")) {
+    return normalizedSlug.replace(/-/g, "_")
+  }
+  return undefined
 }
 
 function MultipleActionTypeField({

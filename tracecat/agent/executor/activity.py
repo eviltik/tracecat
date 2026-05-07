@@ -11,7 +11,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from time import perf_counter
-from typing import Any
+from typing import Any, TypeGuard
 
 from pydantic import AliasChoices, BaseModel, Field
 from temporalio import activity
@@ -25,12 +25,18 @@ from tracecat.agent.common.config import (
 from tracecat.agent.common.exceptions import AgentSandboxExecutionError
 from tracecat.agent.common.protocol import RuntimeInitPayload
 from tracecat.agent.common.stream_types import ToolCallContent
-from tracecat.agent.common.types import MCPToolDefinition, SandboxAgentConfig
+from tracecat.agent.common.types import (
+    MCPHttpServerConfig,
+    MCPServerConfig,
+    MCPToolDefinition,
+    SandboxAgentConfig,
+)
 from tracecat.agent.executor.loopback import (
     LoopbackHandler,
     LoopbackInput,
     LoopbackResult,
 )
+from tracecat.agent.preset.service import AgentPresetService
 from tracecat.agent.runtime.claude_code.broker import (
     ClaudeTurnRequest,
     ConcurrentSessionTurnError,
@@ -39,6 +45,11 @@ from tracecat.agent.runtime_services import get_claude_runtime_broker
 from tracecat.agent.sandbox.llm_proxy import LLM_SOCKET_NAME, LLMSocketProxy
 from tracecat.agent.session.service import AgentSessionService
 from tracecat.agent.skill.service import SkillService
+from tracecat.agent.tokens import (
+    InternalToolContext,
+    UserMCPServerClaim,
+    mint_mcp_token,
+)
 from tracecat.agent.types import AgentConfig
 from tracecat.auth.types import Role
 from tracecat.chat.schemas import ChatMessage
@@ -76,13 +87,17 @@ class AgentExecutorInput(BaseModel):
     config: AgentConfig
     # Role for context
     role: Role
-    # Authentication tokens (minted by workflow before calling activity)
+    # Authentication tokens. The workflow mints MCP auth for the existing direct
+    # server path; this activity re-mints it only when saved MCP integrations
+    # need to be resolved locally.
     mcp_auth_token: str
     llm_gateway_auth_token: str = Field(
         validation_alias=AliasChoices("llm_gateway_auth_token", "litellm_auth_token"),
     )
     # Resolved tool definitions
     allowed_actions: dict[str, MCPToolDefinition] | None = None
+    allowed_internal_tools: list[str] | None = None
+    internal_tool_context: InternalToolContext | None = None
     # Session resume data from previous runs
     sdk_session_id: str | None = None
     sdk_session_data: str | None = None
@@ -107,6 +122,61 @@ class AgentExecutorResult(BaseModel):
     )
     result_usage: dict[str, Any] | None = None
     result_num_turns: int | None = None
+
+
+def _is_http_mcp_server(config: MCPServerConfig) -> TypeGuard[MCPHttpServerConfig]:
+    return config.get("type", "http") == "http"
+
+
+def _mcp_server_claim(config: MCPHttpServerConfig) -> UserMCPServerClaim:
+    return UserMCPServerClaim(
+        name=config["name"],
+        url=config["url"],
+        transport=config.get("transport", "http"),
+        headers=config.get("headers", {}),
+        timeout=config.get("timeout"),
+    )
+
+
+async def _prepare_mcp_runtime_auth(input: AgentExecutorInput) -> str:
+    """Resolve saved MCP integrations and mint the runtime MCP token locally."""
+    resolved_servers: list[MCPServerConfig] = []
+    if input.config.mcp_integrations:
+        async with AgentPresetService.with_session(role=input.role) as service:
+            await service.validate_mcp_integrations(input.config.mcp_integrations)
+            resolved = await service.resolve_mcp_integrations(
+                input.config.mcp_integrations
+            )
+        resolved_servers.extend(resolved or [])
+
+    direct_servers = list(input.config.mcp_servers or [])
+    runtime_servers = direct_servers + [
+        server for server in resolved_servers if server.get("type", "http") == "stdio"
+    ]
+    input.config.mcp_servers = runtime_servers or None
+
+    user_mcp_servers = [
+        _mcp_server_claim(server)
+        for server in [*direct_servers, *resolved_servers]
+        if _is_http_mcp_server(server)
+    ]
+
+    if input.role.organization_id is None:
+        raise AgentSandboxExecutionError("Agent execution requires organization_id")
+
+    info = activity.info()
+    return mint_mcp_token(
+        workspace_id=input.workspace_id,
+        organization_id=input.role.organization_id,
+        user_id=input.role.user_id,
+        allowed_actions=list((input.allowed_actions or {}).keys()),
+        session_id=input.session_id,
+        parent_agent_workflow_id=info.workflow_id,
+        parent_agent_run_id=info.workflow_run_id,
+        user_mcp_servers=user_mcp_servers,
+        allowed_internal_tools=input.allowed_internal_tools,
+        internal_tool_context=input.internal_tool_context,
+    )
 
 
 class ExecuteApprovedToolsInput(BaseModel):
@@ -549,6 +619,9 @@ async def run_agent_activity(
     activity.heartbeat(
         f"Starting agent execution ({sandbox_mode} mode): {input.session_id}"
     )
+
+    if input.config.mcp_integrations:
+        input.mcp_auth_token = await _prepare_mcp_runtime_auth(input)
 
     executor = SandboxedAgentExecutor(input=input)
     result = await executor.run()

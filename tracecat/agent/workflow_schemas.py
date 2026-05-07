@@ -109,6 +109,7 @@ class AgentConfigPayload(BaseModel):
     namespaces: list[str] | None = Field(default=None)
     tool_approvals: dict[str, bool] | None = Field(default=None)
     model_settings: dict[str, Any] | None = Field(default=None)
+    mcp_integrations: list[str] | None = Field(default=None)
     mcp_servers: list[MCPServerConfigPayload] | None = Field(default=None)
     retries: int
     enable_thinking: bool = Field(default=True)

@@ -132,6 +132,8 @@ class AgentConfig:
     tool_approvals: dict[str, bool] | None = None
     # MCP
     model_settings: dict[str, Any] | None = None
+    mcp_integrations: list[str] | None = None
+    """Saved MCP integration IDs to resolve inside trusted agent activities."""
     mcp_servers: list[MCPServerConfig] | None = None
     retries: int = TRACECAT__AGENT_MAX_RETRIES
     deps_type: type[Any] | None = None

@@ -499,6 +499,9 @@ export type AgentPresetCreate = {
   tool_approvals?: {
     [key: string]: boolean
   } | null
+  /**
+   * Saved MCP integrations attached to the agent preset.
+   */
   mcp_integrations?: Array<string> | null
   retries?: number
   enable_thinking?: boolean
@@ -524,6 +527,9 @@ export type AgentPresetRead = {
   tool_approvals?: {
     [key: string]: boolean
   } | null
+  /**
+   * Saved MCP integrations attached to the agent preset.
+   */
   mcp_integrations?: Array<string> | null
   retries?: number
   enable_thinking?: boolean
@@ -601,6 +607,9 @@ export type AgentPresetUpdate = {
   tool_approvals?: {
     [key: string]: boolean
   } | null
+  /**
+   * Saved MCP integrations attached to the agent preset.
+   */
   mcp_integrations?: Array<string> | null
   retries?: number | null
   enable_thinking?: boolean | null
@@ -641,6 +650,9 @@ export type AgentPresetVersionRead = {
   tool_approvals?: {
     [key: string]: boolean
   } | null
+  /**
+   * Saved MCP integrations attached to the agent preset.
+   */
   mcp_integrations?: Array<string> | null
   retries?: number
   enable_thinking?: boolean

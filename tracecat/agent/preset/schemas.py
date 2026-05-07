@@ -54,6 +54,13 @@ PresetModelWriteField = Annotated[
     str,
     StringConstraints(strip_whitespace=True, min_length=1, max_length=120),
 ]
+PresetMCPIntegrationsField = Annotated[
+    list[str] | None,
+    Field(
+        title="MCP Integrations",
+        description="Saved MCP integrations attached to the agent preset.",
+    ),
+]
 
 
 class AgentPresetExecutionConfig(Schema):
@@ -68,7 +75,7 @@ class AgentPresetExecutionConfig(Schema):
     actions: list[str] | None = Field(default=None)
     namespaces: list[str] | None = Field(default=None)
     tool_approvals: dict[str, bool] | None = Field(default=None)
-    mcp_integrations: list[str] | None = Field(default=None)
+    mcp_integrations: PresetMCPIntegrationsField = None
     retries: int = Field(default=3, ge=0)
     enable_thinking: bool = Field(default=True)
     enable_internet_access: bool = Field(default=False)
@@ -86,7 +93,7 @@ class AgentPresetExecutionConfigWrite(Schema):
     actions: list[str] | None = Field(default=None)
     namespaces: list[str] | None = Field(default=None)
     tool_approvals: dict[str, bool] | None = Field(default=None)
-    mcp_integrations: list[str] | None = Field(default=None)
+    mcp_integrations: PresetMCPIntegrationsField = None
     retries: int = Field(default=3, ge=0)
     enable_thinking: bool = Field(default=True)
     enable_internet_access: bool = Field(default=False)
@@ -121,7 +128,7 @@ class AgentPresetUpdate(BaseModel):
     actions: list[str] | None = Field(default=None)
     namespaces: list[str] | None = Field(default=None)
     tool_approvals: dict[str, bool] | None = Field(default=None)
-    mcp_integrations: list[str] | None = Field(default=None)
+    mcp_integrations: PresetMCPIntegrationsField = None
     retries: int | None = Field(default=None, ge=0)
     enable_thinking: bool | None = Field(default=None)
     enable_internet_access: bool | None = Field(default=None)
