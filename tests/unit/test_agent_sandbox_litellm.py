@@ -1616,6 +1616,30 @@ async def test_executor_starts_llm_socket_proxy_for_passthrough_provider_with_in
     assert fake_broker.requests[0].enable_internet_access is True
 
 
+def test_executor_routes_passthrough_root_with_subagents_through_gateway(
+    tmp_path: Path,
+) -> None:
+    subagent = SandboxSubagentConfig(
+        alias="analyst",
+        description="Use for enrichment analysis.",
+        prompt="Analyze enrichment data.",
+        config=SandboxAgentConfig(
+            model_name="gpt-5-mini",
+            model_provider="openai",
+        ),
+        mcp_auth_token="child-mcp-token",
+    )
+    executor_input = _make_passthrough_executor_input(
+        enable_internet_access=False
+    ).model_copy(update={"subagents": [subagent]})
+    executor = SandboxedAgentExecutor(input=executor_input)
+
+    proxy = executor._create_llm_socket_proxy(tmp_path / LLM_SOCKET_NAME)
+
+    assert proxy.upstream_url == app_config.TRACECAT__LITELLM_BASE_URL.rstrip("/")
+    assert proxy._is_passthrough is False
+
+
 class _DummyBridge:
     instances: list[_DummyBridge] = []
 

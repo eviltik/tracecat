@@ -184,7 +184,12 @@ class SandboxedAgentExecutor:
             self._fatal_error = error_msg
             self._fatal_error_event.set()
 
-        if self.input.config.passthrough:
+        # Explicit subagent model routes are synthetic gateway keys. Keep mixed
+        # passthrough/subagent runs on the gateway so those routes can resolve.
+        use_direct_passthrough = (
+            self.input.config.passthrough and not self.input.subagents
+        )
+        if use_direct_passthrough:
             if self.input.config.base_url is None:
                 raise AgentSandboxExecutionError(
                     "Custom model provider passthrough requires a resolved base_url."
@@ -196,14 +201,14 @@ class SandboxedAgentExecutor:
         logger.info(
             "Creating LLM socket proxy",
             has_upstream_url=bool(upstream_url),
-            passthrough=self.input.config.passthrough,
+            passthrough=use_direct_passthrough,
         )
 
         return LLMSocketProxy(
             socket_path=socket_path,
             upstream_url=upstream_url,
             on_error=on_error,
-            passthrough=self.input.config.passthrough,
+            passthrough=use_direct_passthrough,
             role=self.input.role,
             model_provider=self.input.config.model_provider,
             catalog_id=self.input.config.catalog_id,
