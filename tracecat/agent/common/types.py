@@ -120,6 +120,10 @@ class SandboxAgentConfig:
     # Tools
     tool_approvals: dict[str, bool] | None = None
     """Map of action names to whether they require approval."""
+    allowed_tools: list[str] | None = None
+    """Whitelist of Claude SDK built-in tools the runtime should enable.
+    ``None`` keeps the SDK default; ``[]`` disables all built-ins; a
+    specific list whitelists those tool names."""
 
     # MCP
     mcp_servers: list[MCPServerConfig] | None = None
@@ -147,6 +151,7 @@ class SandboxAgentConfig:
             system_prompt_replace=data.get("system_prompt_replace"),
             system_prompt_append=data.get("system_prompt_append"),
             tool_approvals=data.get("tool_approvals"),
+            allowed_tools=data.get("allowed_tools"),
             mcp_servers=data.get("mcp_servers"),
             output_type=data.get("output_type"),
             enable_thinking=data.get("enable_thinking", True),
@@ -171,6 +176,7 @@ class SandboxAgentConfig:
             system_prompt_replace=getattr(config, "system_prompt_replace", None),
             system_prompt_append=getattr(config, "system_prompt_append", None),
             tool_approvals=config.tool_approvals,
+            allowed_tools=getattr(config, "allowed_tools", None),
             mcp_servers=config.mcp_servers,
             output_type=config.output_type,
             enable_thinking=getattr(config, "enable_thinking", True),
@@ -194,6 +200,8 @@ class SandboxAgentConfig:
             result["system_prompt_append"] = self.system_prompt_append
         if self.tool_approvals is not None:
             result["tool_approvals"] = self.tool_approvals
+        if self.allowed_tools is not None:
+            result["allowed_tools"] = self.allowed_tools
         if self.mcp_servers is not None:
             result["mcp_servers"] = self.mcp_servers
         if self.output_type is not None:

@@ -36,6 +36,9 @@ with workflow.unsafe.imports_passed_through():
     from tracecat.agent.provider.activities import (
         resolve_custom_provider_overrides_activity,
     )
+    from tracecat.agent.provider.tool_overrides import (
+        resolve_custom_provider_tools_activity,
+    )
     from tracecat.agent.session.activities import get_session_activities
     from tracecat.dsl.client import get_temporal_client
     from tracecat.dsl.interceptor import SentryInterceptor
@@ -85,6 +88,7 @@ def get_activities() -> list[Callable[..., object]]:
     activities.append(resolve_agent_preset_version_ref_activity)
     activities.append(resolve_custom_model_provider_config_activity)
     activities.append(resolve_custom_provider_overrides_activity)
+    activities.append(resolve_custom_provider_tools_activity)
     activities.extend(get_session_activities())
     return activities
 

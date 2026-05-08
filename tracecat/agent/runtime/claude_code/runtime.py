@@ -900,6 +900,12 @@ class ClaudeAgentRuntime:
                     system_prompt_replace=payload.config.system_prompt_replace,
                     system_prompt_append=payload.config.system_prompt_append,
                 ),
+                # ``tools`` is omitted when ``allowed_tools is None`` so the
+                # CLI applies its default (full built-in toolset). When
+                # explicitly set — including the empty list — it's
+                # forwarded as-is, mapping onto ``--tools "..."`` /
+                # ``--tools ""`` on the underlying Claude Code CLI.
+                tools=payload.config.allowed_tools,
                 mcp_servers=mcp_servers,
                 disallowed_tools=disallowed_tools,
                 stderr=handle_claude_stderr,

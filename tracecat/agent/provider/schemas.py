@@ -35,6 +35,14 @@ class AgentCustomProviderCreate(BaseModel):
     system_prompt_append: str | None = Field(default=None)
     """Append this string to the resolved system prompt. Cumulates with any
     action-level append."""
+    allowed_tools: list[str] | None = Field(default=None)
+    """Optional whitelist of Claude SDK built-in tools the runtime is
+    allowed to enable for ``ai.action`` invocations using this source.
+    ``None`` keeps the SDK default (full toolset). An empty list ``[]``
+    disables all built-in tools — useful for upstream backends that do
+    not have access to the SDK's host environment (Bash, Read, Edit,
+    etc. cannot run on a remote LLM endpoint anyway). A specific list
+    such as ``["Read", "Grep"]`` whitelists those tool names only."""
 
     @field_validator("base_url")
     @classmethod
@@ -56,6 +64,7 @@ class AgentCustomProviderRead(BaseModel):
     last_refreshed_at: datetime | None
     system_prompt_replace: str | None = None
     system_prompt_append: str | None = None
+    allowed_tools: list[str] | None = None
 
 
 class AgentCustomProviderUpdate(BaseModel):
@@ -69,6 +78,7 @@ class AgentCustomProviderUpdate(BaseModel):
     custom_headers: dict[str, str] | None = None
     system_prompt_replace: str | None = None
     system_prompt_append: str | None = None
+    allowed_tools: list[str] | None = None
 
     @field_validator("base_url")
     @classmethod

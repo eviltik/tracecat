@@ -2645,6 +2645,7 @@ class AgentCustomProvider(OrganizationModel):
     )
     system_prompt_replace: Mapped[str | None] = mapped_column(Text, nullable=True)
     system_prompt_append: Mapped[str | None] = mapped_column(Text, nullable=True)
+    allowed_tools: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
 
     catalog_rows: Mapped[list[AgentCatalog]] = relationship(
         "AgentCatalog",

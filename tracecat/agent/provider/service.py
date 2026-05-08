@@ -93,6 +93,7 @@ class AgentCustomProviderService(BaseOrgService):
             encrypted_config=encrypted_config,
             system_prompt_replace=provider.system_prompt_replace,
             system_prompt_append=provider.system_prompt_append,
+            allowed_tools=provider.allowed_tools,
         )
         self.session.add(model)
         await self.session.commit()

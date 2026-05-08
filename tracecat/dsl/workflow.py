@@ -46,6 +46,12 @@ with workflow.unsafe.imports_passed_through():
         resolve_custom_provider_overrides_activity,
     )
     from tracecat.agent.provider.cascade import resolve_system_prompt_overrides
+    from tracecat.agent.provider.tool_cascade import resolve_allowed_tools
+    from tracecat.agent.provider.tool_overrides import (
+        CustomProviderToolsResult,
+        ResolveCustomProviderToolsInput,
+        resolve_custom_provider_tools_activity,
+    )
     from tracecat.agent.schemas import RunAgentArgs
     from tracecat.agent.session.types import AgentSessionEntity
     from tracecat.agent.types import AgentConfig
@@ -1033,15 +1039,15 @@ class DSLWorkflow:
                         start_to_close_timeout=timedelta(seconds=60),
                         retry_policy=RETRY_POLICIES["activity:fail_fast"],
                     )
-                    # Resolve source-level system prompt overrides if a catalog
-                    # row backs this invocation. The activity is best-effort:
-                    # it gracefully returns empty results on benign misses
-                    # (non-custom-provider catalog rows, missing rows) and
-                    # swallows DB failures internally with a warning log.
-                    # Wrap the activity call too so a Temporal-level failure
-                    # (timeout, worker death) also falls back to defaults
-                    # instead of aborting the workflow run.
+                    # Resolve source-level overrides (system prompt + tools
+                    # allowlist) when a catalog row backs this invocation.
+                    # Both activities are best-effort: each swallows DB
+                    # failures internally with a warning log. We additionally
+                    # wrap the ``execute_activity`` calls so Temporal-level
+                    # failures (timeout, worker death) also fall back to
+                    # defaults instead of aborting the workflow run.
                     source_overrides = CustomProviderOverridesResult()
+                    source_tools = CustomProviderToolsResult()
                     if action_args.catalog_id is not None:
                         try:
                             source_overrides = await workflow.execute_activity(
@@ -1060,10 +1066,27 @@ class DSLWorkflow:
                                 catalog_id=str(action_args.catalog_id),
                                 error=str(exc),
                             )
+                        try:
+                            source_tools = await workflow.execute_activity(
+                                resolve_custom_provider_tools_activity,
+                                arg=ResolveCustomProviderToolsInput(
+                                    role=self.role,
+                                    catalog_id=action_args.catalog_id,
+                                ),
+                                start_to_close_timeout=timedelta(seconds=10),
+                                retry_policy=RETRY_POLICIES["activity:fail_fast"],
+                            )
+                        except (ActivityError, ApplicationError) as exc:
+                            self.logger.warning(
+                                "Custom provider tools activity failed; "
+                                "falling back to SDK default toolset",
+                                catalog_id=str(action_args.catalog_id),
+                                error=str(exc),
+                            )
                     # Cascade: action overrides win over source overrides.
                     # Action-level fields are read defensively via ``getattr``
                     # because ``AgentActionArgs`` (defined in the EE schema
-                    # module) does not yet expose them. When EE adds the two
+                    # module) does not yet expose them. When EE adds the
                     # fields, this code starts honouring them with no further
                     # change.
                     overrides = resolve_system_prompt_overrides(
@@ -1076,13 +1099,21 @@ class DSLWorkflow:
                             action_args, "system_prompt_append", None
                         ),
                     )
+                    resolved_tools = resolve_allowed_tools(
+                        source_value=source_tools.allowed_tools,
+                        action_value=getattr(action_args, "allowed_tools", None),
+                    )
                     self.logger.info(
-                        "Resolved agent system prompt overrides",
+                        "Resolved agent overrides",
                         catalog_id=str(action_args.catalog_id)
                         if action_args.catalog_id
                         else None,
                         system_prompt_replace_source=overrides.replace_source,
                         system_prompt_append_count=overrides.append_count,
+                        allowed_tools_source=resolved_tools.source,
+                        allowed_tools_count=len(resolved_tools.allowed_tools)
+                        if resolved_tools.allowed_tools is not None
+                        else None,
                     )
                     wf_info = workflow.info()
                     child_search_attributes = _build_agent_child_search_attributes(
@@ -1101,6 +1132,7 @@ class DSLWorkflow:
                                 instructions=action_args.instructions,
                                 system_prompt_replace=overrides.replace,
                                 system_prompt_append=overrides.append,
+                                allowed_tools=resolved_tools.allowed_tools,
                                 output_type=action_args.output_type,
                                 model_settings=action_args.model_settings,
                                 retries=action_args.retries,

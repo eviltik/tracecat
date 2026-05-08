@@ -116,6 +116,8 @@ const customProviderSchema = z
     passthrough: z.boolean(),
     systemPromptReplace: z.string().optional(),
     systemPromptAppend: z.string().optional(),
+    allowedToolsMode: z.enum(["default", "disable_all", "whitelist"]),
+    allowedToolsList: z.string().optional(),
   })
   .superRefine((value, ctx) => {
     const raw = value.customHeadersJson?.trim()
@@ -163,6 +165,8 @@ const DEFAULT_CUSTOM_PROVIDER_VALUES: CustomProviderFormValues = {
   passthrough: false,
   systemPromptReplace: "",
   systemPromptAppend: "",
+  allowedToolsMode: "default",
+  allowedToolsList: "",
 }
 
 const CLOUD_CATALOG_PROVIDERS = [
@@ -718,12 +722,45 @@ function ProviderMetaPill({
   )
 }
 
+function allowedToolsToFormState(
+  allowedTools: readonly string[] | null | undefined
+): {
+  mode: "default" | "disable_all" | "whitelist"
+  list: string
+} {
+  if (allowedTools == null) {
+    return { mode: "default", list: "" }
+  }
+  if (allowedTools.length === 0) {
+    return { mode: "disable_all", list: "" }
+  }
+  return { mode: "whitelist", list: allowedTools.join(", ") }
+}
+
+function allowedToolsFromFormState(
+  mode: "default" | "disable_all" | "whitelist",
+  list: string | undefined
+): string[] | null {
+  if (mode === "default") {
+    return null
+  }
+  if (mode === "disable_all") {
+    return []
+  }
+  // whitelist: split CSV, trim, drop empties
+  return (list ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+}
+
 function getProviderDialogDefaults(
   provider: AgentCustomProviderRead | null
 ): CustomProviderFormValues {
   if (!provider) {
     return DEFAULT_CUSTOM_PROVIDER_VALUES
   }
+  const tools = allowedToolsToFormState(provider.allowed_tools)
   return {
     displayName: provider.display_name,
     baseUrl: provider.base_url ?? "",
@@ -733,6 +770,8 @@ function getProviderDialogDefaults(
     passthrough: provider.passthrough,
     systemPromptReplace: provider.system_prompt_replace ?? "",
     systemPromptAppend: provider.system_prompt_append ?? "",
+    allowedToolsMode: tools.mode,
+    allowedToolsList: tools.list,
   }
 }
 
@@ -748,6 +787,10 @@ function buildProviderCreatePayload(
     passthrough: values.passthrough,
     system_prompt_replace: preserveEmptyOptional(values.systemPromptReplace),
     system_prompt_append: preserveEmptyOptional(values.systemPromptAppend),
+    allowed_tools: allowedToolsFromFormState(
+      values.allowedToolsMode,
+      values.allowedToolsList
+    ),
   }
 }
 
@@ -761,6 +804,10 @@ function buildProviderUpdatePayload(
     passthrough: values.passthrough,
     system_prompt_replace: preserveEmptyOptional(values.systemPromptReplace),
     system_prompt_append: preserveEmptyOptional(values.systemPromptAppend),
+    allowed_tools: allowedToolsFromFormState(
+      values.allowedToolsMode,
+      values.allowedToolsList
+    ),
   }
 
   const apiKey = normalizeOptional(values.apiKey)
@@ -1094,6 +1141,92 @@ function CustomProviderDialog({
                   </FormItem>
                 )}
               />
+
+              <FormField
+                control={form.control}
+                name="passthrough"
+                render={({ field }) => (
+                  <FormItem className="flex items-center justify-between gap-4 rounded-md border p-3">
+                    <div className="space-y-1">
+                      <FormLabel className="text-sm">
+                        Passthrough mode
+                      </FormLabel>
+                      <FormDescription>
+                        Skip gateway transforms and forward requests directly to
+                        the upstream endpoint.
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="allowedToolsMode"
+                render={({ field }) => (
+                  <FormItem className="space-y-2 rounded-md border p-3">
+                    <div className="space-y-1">
+                      <FormLabel className="text-sm">
+                        Built-in tools (Claude SDK)
+                      </FormLabel>
+                      <FormDescription>
+                        Controls which Claude SDK built-in tools (Bash, Read,
+                        Edit, …) the runtime exposes for `ai.action` invocations
+                        using this source. Disabling them removes ~96 % of the
+                        per-call token overhead for backends that cannot execute
+                        these tools anyway.
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Select
+                        value={field.value}
+                        onValueChange={field.onChange}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="default">
+                            Default (full SDK toolset)
+                          </SelectItem>
+                          <SelectItem value="disable_all">
+                            Disable all built-in tools
+                          </SelectItem>
+                          <SelectItem value="whitelist">
+                            Whitelist specific tools
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              {form.watch("allowedToolsMode") === "whitelist" ? (
+                <FormField
+                  control={form.control}
+                  name="allowedToolsList"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Allowed tools</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Bash, Read, Edit" {...field} />
+                      </FormControl>
+                      <FormDescription>
+                        Comma-separated list of Claude SDK built-in tool names.
+                        Empty list with whitelist mode behaves like disable all.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              ) : null}
             </div>
 
             <DialogFooter className="gap-2 pt-4 sm:gap-0">

@@ -407,6 +407,7 @@ export type AgentCustomProviderCreate = {
   } | null
   system_prompt_replace?: string | null
   system_prompt_append?: string | null
+  allowed_tools?: Array<string> | null
 }
 
 /**
@@ -430,6 +431,7 @@ export type AgentCustomProviderRead = {
   last_refreshed_at: string | null
   system_prompt_replace?: string | null
   system_prompt_append?: string | null
+  allowed_tools?: Array<string> | null
 }
 
 /**
@@ -446,6 +448,7 @@ export type AgentCustomProviderUpdate = {
   } | null
   system_prompt_replace?: string | null
   system_prompt_append?: string | null
+  allowed_tools?: Array<string> | null
 }
 
 export type AgentModel = {
