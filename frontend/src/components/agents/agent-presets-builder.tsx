@@ -258,9 +258,11 @@ const agentPresetSchema = z
       .array(
         z.object({
           preset: z.string().default(""),
+          presetId: z.string().default(""),
           name: z.string().default(""),
           description: z.string().max(1000).default(""),
           presetVersion: z.string().default(""),
+          presetVersionId: z.string().default(""),
           maxTurns: z.string().default(""),
         })
       )
@@ -394,6 +396,10 @@ type AgentPresetFormValues = z.infer<typeof agentPresetSchema>
 type SubagentFormValue = AgentPresetFormValues["subagents"][number]
 type SkillBindingFormValue = AgentPresetFormValues["skills"][number]
 type ToolApprovalFormValue = AgentPresetFormValues["toolApprovals"][number]
+type PreservedAttachedSubagentRef = AttachedSubagentRef & {
+  preset_id?: string
+  preset_version_id?: string
+}
 
 const LIVE_INTERNET_ACCESS_WARNING_MESSAGE =
   "One or more selected subagents have internet access enabled, but the parent agent does not. Enable internet access on the parent agent for those subagents to use web tools."
@@ -1487,9 +1493,11 @@ function AgentPresetForm({
   const handleAddSubagent = useCallback(() => {
     appendSubagent({
       preset: "",
+      presetId: "",
       name: "",
       description: "",
       presetVersion: "",
+      presetVersionId: "",
       maxTurns: "",
     })
   }, [appendSubagent])
@@ -2567,9 +2575,11 @@ function AgentPresetSubagentsPanel({
                 const selectedPreset = form.watch(`subagents.${index}.preset`)
                 const selectedSubagent = selectedSubagents[index] ?? {
                   preset: selectedPreset,
+                  presetId: "",
                   name: "",
                   description: "",
                   presetVersion: "",
+                  presetVersionId: "",
                   maxTurns: "",
                 }
                 const selectedPresetIsMissing =
@@ -2609,7 +2619,17 @@ function AgentPresetSubagentsPanel({
                               <FormLabel>Preset</FormLabel>
                               <Select
                                 value={field.value}
-                                onValueChange={field.onChange}
+                                onValueChange={(value) => {
+                                  field.onChange(value)
+                                  form.setValue(
+                                    `subagents.${index}.presetId`,
+                                    ""
+                                  )
+                                  form.setValue(
+                                    `subagents.${index}.presetVersionId`,
+                                    ""
+                                  )
+                                }}
                                 disabled={isSaving || !agentsEnabled}
                               >
                                 <FormControl>
@@ -2744,7 +2764,13 @@ function AgentPresetSubagentsPanel({
                                     min={1}
                                     placeholder="Current"
                                     value={field.value ?? ""}
-                                    onChange={field.onChange}
+                                    onChange={(event) => {
+                                      field.onChange(event)
+                                      form.setValue(
+                                        `subagents.${index}.presetVersionId`,
+                                        ""
+                                      )
+                                    }}
                                     disabled={isSaving || !agentsEnabled}
                                   />
                                 </FormControl>
@@ -3542,6 +3568,7 @@ function presetToFormValues(preset: AgentPresetRead): AgentPresetFormValues {
   const subagents = agentsEnabled
     ? (agents.subagents ?? []).map((subagent) => ({
         preset: subagent.preset,
+        presetId: "preset_id" in subagent ? subagent.preset_id : "",
         name: subagent.name ?? "",
         description: subagent.description ?? "",
         presetVersion:
@@ -3549,6 +3576,8 @@ function presetToFormValues(preset: AgentPresetRead): AgentPresetFormValues {
           subagent.preset_version === undefined
             ? ""
             : String(subagent.preset_version),
+        presetVersionId:
+          "preset_version_id" in subagent ? subagent.preset_version_id : "",
         maxTurns:
           subagent.max_turns === null || subagent.max_turns === undefined
             ? ""
@@ -3649,17 +3678,19 @@ function formValuesToAgentsPayload(
   }
 
   const subagents = values.subagents
-    .map((subagent): AttachedSubagentRef | null => {
+    .map((subagent): PreservedAttachedSubagentRef | null => {
       const preset = subagent.preset.trim()
       if (!preset) {
         return null
       }
 
-      const payload: AttachedSubagentRef = { preset }
+      const payload: PreservedAttachedSubagentRef = { preset }
       const name = normalizeOptional(subagent.name)
       const description = normalizeOptional(subagent.description)
       const presetVersion = parseOptionalPositiveInteger(subagent.presetVersion)
       const maxTurns = parseOptionalPositiveInteger(subagent.maxTurns)
+      const presetId = normalizeOptional(subagent.presetId)
+      const presetVersionId = normalizeOptional(subagent.presetVersionId)
 
       if (name !== null) {
         payload.name = name
@@ -3673,10 +3704,16 @@ function formValuesToAgentsPayload(
       if (maxTurns !== null) {
         payload.max_turns = maxTurns
       }
+      if (presetId !== null && presetVersionId !== null) {
+        payload.preset_id = presetId
+        payload.preset_version_id = presetVersionId
+      }
 
       return payload
     })
-    .filter((subagent): subagent is AttachedSubagentRef => subagent !== null)
+    .filter(
+      (subagent): subagent is PreservedAttachedSubagentRef => subagent !== null
+    )
 
   return {
     enabled: true,
