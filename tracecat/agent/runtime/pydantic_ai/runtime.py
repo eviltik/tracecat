@@ -30,6 +30,40 @@ from tracecat.exceptions import TracecatAuthorizationError
 from tracecat.logger import logger
 
 
+def _collapse_instructions(
+    *,
+    replace: str | None,
+    instructions: str | None,
+    append: str | None,
+) -> str | None:
+    """Collapse the cascade into pydantic-ai's single ``instructions`` kwarg.
+
+    pydantic-ai does not have an implicit baseline (unlike the Claude
+    Code CLI which injects its own when nothing is set). Three potential
+    contributors are folded into one string in cascade order:
+
+    1. ``replace``: if not ``None`` (including empty string), it becomes
+       the baseline. The legacy ``instructions`` kwarg is dropped — the
+       caller asked for a full replacement.
+    2. ``instructions`` (legacy field on ``ai.action``): used as the
+       baseline only when ``replace`` is ``None``.
+    3. ``append``: when truthy, concatenated after the resolved
+       baseline with a blank-line separator. Empty / ``None`` skips.
+
+    Returns ``None`` only when every contributor is absent.
+    """
+    baseline: str | None = replace if replace is not None else instructions
+    if append:
+        if baseline:
+            return f"{baseline}\n\n{append}"
+        if baseline == "":
+            # Honour an explicit "no baseline" override while still
+            # appending requested text after a blank line.
+            return f"\n\n{append}"
+        return append
+    return baseline
+
+
 async def run_agent_sync(
     agent: Agent[Any, Any],
     user_prompt: str,
@@ -86,6 +120,8 @@ async def run_agent(
     mcp_server_headers: dict[str, str] | None = None,
     mcp_servers: list[MCPServerConfig] | None = None,
     instructions: str | None = None,
+    system_prompt_replace: str | None = None,
+    system_prompt_append: str | None = None,
     output_type: OutputType | None = None,
     model_settings: dict[str, Any] | None = None,
     max_tool_calls: int = TRACECAT__AGENT_MAX_TOOL_CALLS,
@@ -183,6 +219,12 @@ async def run_agent(
             }
             mcp_servers.append(legacy_mcp_server)
 
+        resolved_instructions = _collapse_instructions(
+            replace=system_prompt_replace,
+            instructions=instructions,
+            append=system_prompt_append,
+        )
+
         args = RunAgentArgs(
             user_prompt=user_prompt,
             session_id=session_id,
@@ -190,7 +232,7 @@ async def run_agent(
                 model_name=model_name,
                 model_provider=model_provider,
                 base_url=base_url,
-                instructions=instructions,
+                instructions=resolved_instructions,
                 output_type=output_type,
                 model_settings=model_settings,
                 retries=retries,
