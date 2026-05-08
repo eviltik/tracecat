@@ -96,7 +96,7 @@ docker build \
   --build-arg NEXT_PUBLIC_BASE_PATH=/tracecat \
   --build-arg NEXT_PUBLIC_APP_URL=https://example.com/tracecat \
   --build-arg NEXT_PUBLIC_API_URL=https://example.com/tracecat/api \
-  --build-arg NEXT_SERVER_API_URL=http://sysdio2_tracecat_api:8000 \
+  --build-arg NEXT_SERVER_API_URL=http://api:8000 \
   -f frontend/Dockerfile.prod \
   -t mytracecat-ui:basepath \
   frontend/
