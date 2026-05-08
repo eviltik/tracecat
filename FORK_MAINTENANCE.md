@@ -107,9 +107,9 @@ exist by convention:
 
 | Tag | Environment |
 |---|---|
-| `mytracecat-ui:basepath` | dev local |
-| `mytracecat-ui:preprod` | preprod (staging-host) |
-| `mytracecat-ui:prod` | prod (prod-host) |
+| `mytracecat-ui:dev` | local development |
+| `mytracecat-ui:staging` | staging |
+| `mytracecat-ui:prod` | production |
 
 (The backend image is environment-agnostic — same `mytracecat-api:dev`
 tag everywhere; URLs come from `.local.env`.)
