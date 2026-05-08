@@ -10,7 +10,8 @@ from typing import TYPE_CHECKING, Any, cast
 
 import sqlalchemy as sa
 from slugify import slugify
-from sqlalchemy import func, select
+from sqlalchemy import column, func, literal, select
+from sqlalchemy.dialects.postgresql import JSONB
 
 from tracecat.agent.access.service import AgentModelAccessService
 from tracecat.agent.common.types import MCPHttpServerConfig
@@ -459,42 +460,8 @@ class AgentPresetService(BaseWorkspaceService):
 
     async def _ensure_not_referenced_as_subagent(self, preset: AgentPreset) -> None:
         """Block deletion while other presets still reference this preset."""
-        subagent_ref = {"subagents": [{"preset_id": str(preset.id)}]}
-        legacy_slug_ref = {"subagents": [{"preset": preset.slug}]}
-        head_reference_stmt = (
-            select(AgentPreset.agents)
-            .select_from(AgentPreset)
-            .where(
-                AgentPreset.workspace_id == self.workspace_id,
-                AgentPreset.id != preset.id,
-                sa.or_(
-                    AgentPreset.agents.contains(subagent_ref),
-                    AgentPreset.agents.contains(legacy_slug_ref),
-                ),
-            )
-        )
-        history_reference_stmt = (
-            select(AgentPresetVersion.agents)
-            .select_from(AgentPresetVersion)
-            .where(
-                AgentPresetVersion.workspace_id == self.workspace_id,
-                AgentPresetVersion.preset_id != preset.id,
-                sa.or_(
-                    AgentPresetVersion.agents.contains(subagent_ref),
-                    AgentPresetVersion.agents.contains(legacy_slug_ref),
-                ),
-            )
-        )
-        head_reference_count = self._count_preset_subagent_references(
-            list((await self.session.execute(head_reference_stmt)).scalars()),
-            preset_id=preset.id,
-            slug=preset.slug,
-        )
-        history_reference_count = self._count_preset_subagent_references(
-            list((await self.session.execute(history_reference_stmt)).scalars()),
-            preset_id=preset.id,
-            slug=preset.slug,
-        )
+        head_reference_count = await self._count_head_subagent_references(preset)
+        history_reference_count = await self._count_history_subagent_references(preset)
         if head_reference_count > 0 or history_reference_count > 0:
             raise TracecatValidationError(
                 "Cannot delete an agent preset that is still referenced as a subagent",
@@ -505,45 +472,71 @@ class AgentPresetService(BaseWorkspaceService):
                 },
             )
 
-    @classmethod
-    def _count_preset_subagent_references(
-        cls,
-        agents_configs: Sequence[dict[str, Any]],
-        *,
-        preset_id: uuid.UUID,
-        slug: str,
-    ) -> int:
-        return sum(
-            cls._agents_config_references_preset(
-                agents,
-                preset_id=preset_id,
-                slug=slug,
-            )
-            for agents in agents_configs
+    async def _count_head_subagent_references(self, preset: AgentPreset) -> int:
+        subagent_ref_exists = self._subagent_reference_exists(
+            AgentPreset.agents,
+            preset_id=preset.id,
+            slug=preset.slug,
         )
+        stmt = (
+            select(func.count())
+            .select_from(AgentPreset)
+            .where(
+                AgentPreset.workspace_id == self.workspace_id,
+                AgentPreset.id != preset.id,
+                subagent_ref_exists,
+            )
+        )
+        return (await self.session.execute(stmt)).scalar_one()
+
+    async def _count_history_subagent_references(self, preset: AgentPreset) -> int:
+        subagent_ref_exists = self._subagent_reference_exists(
+            AgentPresetVersion.agents,
+            preset_id=preset.id,
+            slug=preset.slug,
+        )
+        stmt = (
+            select(func.count())
+            .select_from(AgentPresetVersion)
+            .where(
+                AgentPresetVersion.workspace_id == self.workspace_id,
+                AgentPresetVersion.preset_id != preset.id,
+                subagent_ref_exists,
+            )
+        )
+        return (await self.session.execute(stmt)).scalar_one()
 
     @staticmethod
-    def _agents_config_references_preset(
-        agents: dict[str, Any],
+    def _subagent_reference_exists(
+        agents: Any,
         *,
         preset_id: uuid.UUID,
         slug: str,
-    ) -> bool:
-        subagents = agents.get("subagents")
-        if not isinstance(subagents, list):
-            return False
-
-        preset_id_str = str(preset_id)
-        for subagent in subagents:
-            if not isinstance(subagent, dict):
-                continue
-            if subagent_preset_id := subagent.get("preset_id"):
-                if str(subagent_preset_id) == preset_id_str:
-                    return True
-                continue
-            if subagent.get("preset") == slug:
-                return True
-        return False
+    ) -> Any:
+        subagents_value = agents["subagents"]
+        subagents_array = sa.case(
+            (func.jsonb_typeof(subagents_value) == "array", subagents_value),
+            else_=literal([], type_=JSONB),
+        )
+        subagents = (
+            func.jsonb_array_elements(subagents_array)
+            .table_valued(column("value", JSONB))
+            .alias("subagent")
+        )
+        return (
+            select(literal(True))
+            .select_from(subagents)
+            .where(
+                sa.or_(
+                    subagents.c.value["preset_id"].astext == str(preset_id),
+                    sa.and_(
+                        subagents.c.value["preset_id"].astext.is_(None),
+                        subagents.c.value["preset"].astext == slug,
+                    ),
+                )
+            )
+            .exists()
+        )
 
     @requires_entitlement(Entitlement.AGENT_ADDONS)
     async def resolve_agent_preset_config(
