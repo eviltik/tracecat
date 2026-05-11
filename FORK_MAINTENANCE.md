@@ -90,42 +90,31 @@ git push --force-with-lease eviltik deploy/mytracecat
 
 ```bash
 # Backend (used by every Tracecat service except the UI)
-docker build -f Dockerfile -t mytracecat-api:dev .
+docker build -f Dockerfile -t <your-org>-tracecat-api:<tag> .
 
 # UI — build args are baked in at build time (Next.js basePath)
-# Adjust URLs for your environment (dev/preprod/prod).
+# Adjust URLs for your environment.
 docker build \
   --build-arg NEXT_PUBLIC_BASE_PATH=/tracecat \
   --build-arg NEXT_PUBLIC_APP_URL=https://example.com/tracecat \
   --build-arg NEXT_PUBLIC_API_URL=https://example.com/tracecat/api \
   --build-arg NEXT_SERVER_API_URL=http://api:8000 \
   -f frontend/Dockerfile.prod \
-  -t mytracecat-ui:basepath \
+  -t <your-org>-tracecat-ui:<tag> \
   frontend/
 ```
 
-For preprod / prod, swap the URLs in the UI build args. Three image tags
-exist by convention:
-
-| Tag | Environment |
-|---|---|
-| `mytracecat-ui:dev` | local development |
-| `mytracecat-ui:staging` | staging |
-| `mytracecat-ui:prod` | production |
-
-(The backend image is environment-agnostic — same `mytracecat-api:dev`
-tag everywhere; URLs come from `.local.env`.)
+The backend image is environment-agnostic (same image everywhere; URLs
+come from your runtime env). The UI image, in contrast, bakes the
+`NEXT_PUBLIC_*` URLs at build time, so you typically have one UI image
+per target environment.
 
 ### 4. Redeploy
 
-On the dev host:
-
-```bash
-./scripts/install-local.sh tracecat
-```
-
-The migration runner inside the API container applies any new Alembic
-revisions on startup, including ours (`c969b5f63428`).
+Redeploy each of the seven Tracecat services using your usual workflow
+(`docker compose up`, Helm, Fargate, etc.). The migration runner inside
+the API container applies any new Alembic revisions on startup,
+including ours (`c969b5f63428`).
 
 ### 5. Smoke test
 
