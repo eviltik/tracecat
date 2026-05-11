@@ -157,19 +157,6 @@ If a conflict you don't recognise pops up:
    refactors.
 3. Re-run the smoke checklist.
 
-## Time budget
-
-Empirically:
-
-- **No conflict**: 15–30 min (rebase + build + smoke).
-- **Light conflict**: 30–60 min.
-- **Heavy refactor upstream** (rare, e.g. `runtime.py` rewritten): up
-  to 2–3 hours.
-
-Annualised: **~15–35 hours / year** across ~10–30 upstream releases.
-Budget ~2 person-days/year for a developer comfortable with Python,
-Docker, and Next.js.
-
 ## When upstream merges what we have
 
 Unlikely, but if it ever happens (multiple users vote for the same need
