@@ -6,18 +6,6 @@ fork's feature branches and documents the upstream-sync procedure.
 
 If you're reading this on the upstream repo, ignore it.
 
-## Why this fork
-
-Two features were proposed upstream and declined, with an explicit
-recommendation from maintainers to fork rather than insist:
-
-> *"keeping a fork + pull in new changes will be our recommendation"*
->   — Topher Lo, 2026-05-08
-
-A few other patches were added on the same principle: small, focused
-branches, each rebased independently on `origin/main`. Each is tracked
-as a GitHub issue on this fork for context and history.
-
 ## Feature branches
 
 | Branch | What it does | Fork issue | Upstream PR status |
