@@ -716,6 +716,144 @@ async def list_workflow_definitions(
 
 
 @router.post(
+    "/{workflow_id}/upsert",
+    tags=["workflows"],
+    response_model=WorkflowReadMinimal,
+)
+@require_scope("workflow:create", "workflow:update")
+async def upsert_workflow(
+    role: WorkspaceActorRouteRole,
+    session: AsyncDBSession,
+    workflow_id: AnyWorkflowIDPath,
+    file: UploadFile = File(...),
+) -> WorkflowReadMinimal:
+    """Upsert a workflow from a YAML/JSON file at a stable workflow ID.
+
+    If the workflow exists, replaces its DSL (actions, expects, returns, config,
+    metadata) atomically while preserving the workflow row, its webhook (URL
+    secret and API key stay valid), and its schedules. If absent, creates a
+    new workflow using the URL-provided ID.
+
+    Useful for idempotent CI/CD deploys: rerunning the same deploy keeps the
+    webhook URL and API key stable, so downstream integrations don't need to
+    re-discover them after each release.
+
+    The uploaded file must follow the `RemoteWorkflowDefinition` schema
+    (top-level fields: `id`, `alias`, `definition`, optional `folder_path`,
+    `webhook`, `schedules`, `tags`). The `id` in the file must match the
+    URL-provided `workflow_id`. If `webhook` is omitted in the file, the
+    existing webhook configuration (status, methods, API key) is preserved.
+    """
+    # Lazy import to avoid potential circular deps in module-level resolution
+    from tracecat.workflow.store.import_service import WorkflowImportService
+    from tracecat.workflow.store.schemas import RemoteWorkflowDefinition
+
+    if role.workspace_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Workspace ID is required",
+        )
+
+    raw_data = await file.read()
+    match file.content_type:
+        case (
+            "application/yaml"
+            | "text/yaml"
+            | "application/x-yaml"
+            | "application/octet-stream"
+        ):
+            try:
+                external_data = yaml.safe_load(raw_data)
+            except yaml.YAMLError as e:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Error parsing YAML file: {e!r}",
+                ) from e
+        case "application/json":
+            try:
+                external_data = orjson.loads(raw_data)
+            except orjson.JSONDecodeError as e:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Error parsing JSON file: {e!r}",
+                ) from e
+        case _:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"Invalid file type {file.content_type!r}. "
+                    "Only YAML and JSON files are supported."
+                ),
+            )
+
+    if not isinstance(external_data, dict):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File must contain a top-level mapping (RemoteWorkflowDefinition)",
+        )
+
+    try:
+        remote = RemoteWorkflowDefinition.model_validate(external_data)
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "status": "failure",
+                "message": "Invalid RemoteWorkflowDefinition payload",
+                "errors": e.errors(),
+            },
+        ) from e
+
+    # Coherence: the YAML `id` must match the URL `workflow_id`.
+    yaml_wf_id = WorkflowUUID.new(remote.id)
+    if yaml_wf_id != workflow_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"YAML `id` ({yaml_wf_id.short()}) does not match URL "
+                f"`workflow_id` ({workflow_id.short()})"
+            ),
+        )
+
+    import_service = WorkflowImportService(session=session, role=role)
+    result = await import_service.import_workflows_atomic(
+        remote_workflows=[remote],
+        commit_sha="local-upsert",
+    )
+    if not result.success:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "status": "failure",
+                "message": result.message,
+                "errors": [d.model_dump(mode="json") for d in result.diagnostics],
+            },
+        )
+
+    mgmt_service = WorkflowsManagementService(session, role=role)
+    workflow = await mgmt_service.get_workflow(workflow_id)
+    if workflow is None:  # pragma: no cover - shouldn't happen post upsert
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Workflow not found after upsert",
+        )
+
+    return WorkflowReadMinimal(
+        id=WorkflowUUID.new(workflow.id).short(),
+        title=workflow.title,
+        description=workflow.description,
+        status=workflow.status,
+        icon_url=workflow.icon_url,
+        created_at=workflow.created_at,
+        updated_at=workflow.updated_at,
+        version=workflow.version,
+        alias=workflow.alias,
+        error_handler=workflow.error_handler,
+        folder_id=workflow.folder_id,
+    )
+
+
+@router.post(
     "/{workflow_id}/definitions/{version}/restore",
     tags=["workflows"],
     response_model=WorkflowRead,
