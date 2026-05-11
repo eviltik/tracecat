@@ -27,6 +27,8 @@ Rebasing onto upstream `main` is straightforward in 95% of cases.
 |---|---|---|
 | `feat/basepath` | Serve Tracecat under a sub-path (`https://example.com/tracecat`). | [#2652](https://github.com/TracecatHQ/tracecat/issues/2652) |
 | `feat/ai-action-system-prompt-overrides` | Per-source `system_prompt_replace` / `system_prompt_append` on custom providers, with cascade resolution. | [#2654](https://github.com/TracecatHQ/tracecat/issues/2654) |
+| `feat/workflow-upsert` | `POST /workflows/{wf_id}/upsert` — idempotent YAML deploy at a stable workflow_id (preserves webhook URL secret and API key across redeploys). | — |
+| `feat/external-directory` | `GET /workspaces/{ws}/directory` + `POST .../regenerate-key` — service-key-authenticated directory API for internal backends (folders + workflows + webhooks in one tree response). Avoids needing Enterprise service accounts to drive Tracecat from a sister backend. | — |
 | `deploy/mytracecat` | Integration branch — merges all the above on top of `origin/main`. This is what we build Docker images from. | — |
 
 Each feature branch is rebased independently on `origin/main` so it can
@@ -152,6 +154,10 @@ rebase will need attention:
 | `tracecat/auth/users.py` (cookie path) | `feat/basepath` | Low |
 | `frontend/src/components/organization/org-settings-agent.tsx` | `feat/ai-action-system-prompt-overrides` | Medium — UI evolves often |
 | Alembic migrations | `feat/ai-action-system-prompt-overrides` | Low — distinct revision IDs unless upstream also touches `agent_custom_provider` |
+| `tracecat/workflow/management/router.py` (route block before `restore_workflow_definition`) | `feat/workflow-upsert` | Low — additive route, no overlap with existing imports |
+| `tracecat/auth/dependencies.py` (new `WorkspaceServiceRole`) | `feat/external-directory` | Low — additive symbol below `ServiceRole` |
+| `tracecat/api/app.py` (`_include_workspace_scoped_router` block) | `feat/external-directory` | Low — additive `directory_router` registration |
+| `tracecat/directory/*` | `feat/external-directory` | None — new module, no upstream collision |
 
 If a conflict you don't recognise pops up:
 
@@ -185,6 +191,80 @@ on the issues):
    contains the feature.
 3. Move the relevant tests/docs from our branch into a follow-up PR if
    maintainers want to consolidate.
+
+## API surface added by the fork
+
+These endpoints are not present upstream. They are consumed by sister
+internal backends to discover and drive Tracecat workflows without
+relying on a user session cookie or an Enterprise service account.
+
+### `POST /api/workspaces/{ws}/workflows/{wf_id}/upsert`
+
+Branch: `feat/workflow-upsert`.
+
+Idempotent YAML deploy at a stable `workflow_id`. If the workflow
+exists, replaces its DSL while preserving:
+- the workflow row id,
+- the webhook row id (so the URL secret stays valid),
+- the attached `WebhookApiKey` row (so the previously-issued key keeps
+  working).
+
+If absent, creates a new workflow using the URL-provided ID.
+
+Auth: `WorkspaceActorRouteRole` (user session or Tracecat API key,
+same as the rest of the workflow management API).
+
+Body: multipart `file=` containing a YAML or JSON document that
+deserialises to `RemoteWorkflowDefinition` (top-level `id`, `alias`,
+`definition`, optional `webhook`, `schedules`, `tags`, `folder_path`).
+The `id` in the body must match the URL `wf_id`.
+
+Implementation: reuses `WorkflowImportService.import_workflows_atomic`,
+the same code path as the Git sync feature — so the upsert benefits
+from the existing validation, atomicity and tests.
+
+Tests live in `tests/unit/test_workflow_upsert.py` and cover the
+webhook-preservation guarantee that this endpoint is built around.
+
+### `GET /api/workspaces/{ws}/directory`
+
+Branch: `feat/external-directory`.
+
+Returns a workspace's folder/workflow tree in a single roundtrip,
+shaped for client-side tree renderers:
+
+```json
+{
+  "synced_at": "…",
+  "root": [
+    { "_id": "folder:…", "type": "folder", "name": "O365", "path": "/O365/",
+      "children": [
+        { "_id": "wf_…", "type": "workflow", "alias": "…", "version": 4,
+          "webhook_url": "https://…/wf_…/secret",
+          "webhook_key": { "preview": "tc_sk_…XeQ8", "created_at": "…" }
+        }
+      ]
+    }
+  ]
+}
+```
+
+Auth: new `WorkspaceServiceRole` dependency. The client must send
+`x-tracecat-service-key: <TRACECAT__SERVICE_KEY>` and
+`x-tracecat-role-service-id: tracecat-cli`. The workspace comes from
+the URL path.
+
+The raw webhook API key is **not** returned (Tracecat only stores it
+hashed). Use the regenerate endpoint below to mint a fresh one.
+
+### `POST /api/workspaces/{ws}/directory/workflows/{wf_id}/webhook/regenerate-key`
+
+Branch: `feat/external-directory`.
+
+Regenerates the webhook API key for a workflow. The raw key is
+returned once. The previous key (if any) is invalidated server-side.
+
+Same auth as the directory endpoint.
 
 ## Reference: original PRs (for context)
 
