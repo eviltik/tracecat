@@ -118,6 +118,22 @@ ServiceRole = Annotated[
 Sets the `ctx_role` context variable.
 """
 
+WorkspaceServiceRole = Annotated[
+    Role,
+    RoleACL(
+        allow_user=False,
+        allow_service=True,
+        require_workspace="yes",
+        workspace_id_in_path="auto",
+    ),
+]
+"""Dependency for a workspace-scoped service-only role.
+
+Used by integration endpoints that are intended to be called by internal
+backends authenticated via `x-tracecat-service-key`. Requires a workspace
+in the URL path (or `workspace_id` query) so the role is properly scoped.
+"""
+
 OrgUserRole = Annotated[
     Role,
     RoleACL(

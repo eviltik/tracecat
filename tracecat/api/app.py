@@ -179,6 +179,7 @@ from tracecat.workflow.graph.router import router as workflow_graph_router
 from tracecat.workflow.management.folders.router import (
     router as workflow_folders_router,
 )
+from tracecat.directory.router import router as directory_router
 from tracecat.workflow.management.router import router as workflow_management_router
 from tracecat.workflow.schedules.router import router as schedules_router
 from tracecat.workflow.store.router import router as workflow_store_router
@@ -503,6 +504,7 @@ def create_app(**kwargs) -> FastAPI:
     app.include_router(workspace_service_accounts_router)
     app.include_router(mcp_personal_access_tokens_router)
     _include_workspace_scoped_router(app, workflow_management_router)
+    _include_workspace_scoped_router(app, directory_router)
     _include_workspace_scoped_router(app, workflow_executions_workflow_router)
     _include_workspace_scoped_router(app, workflow_graph_router)
     _include_workspace_scoped_router(app, workflow_executions_router)
