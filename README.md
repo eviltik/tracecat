@@ -20,8 +20,11 @@
 >   `POST .../webhook/regenerate-key`: service-key authenticated directory API
 >   for internal backends (folders + workflows + webhooks in one tree response).
 >
-> See [`FORK_MAINTENANCE.md`](FORK_MAINTENANCE.md) for the full branch layout,
-> rebase procedure, conflict-prone files, and per-endpoint reference.
+> See [`FORK_MAINTENANCE.md`](FORK_MAINTENANCE.md) for the branch index
+> (each branch links to a dedicated issue with goal, design, smoke
+> checklist, and upstream PR status), and
+> [`FORK_SYNC.md`](FORK_SYNC.md) for the upstream-sync procedure
+> (rebase / rebuild / redeploy).
 >
 > The upstream README follows.
 
