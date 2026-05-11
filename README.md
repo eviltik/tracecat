@@ -1,3 +1,32 @@
+<!--
+  Fork notice — only present on the eviltik/tracecat fork (deploy/mytracecat
+  branch). Upstream TracecatHQ/tracecat does not carry this block.
+-->
+
+> [!NOTE]
+> **This is a fork of [TracecatHQ/tracecat](https://github.com/TracecatHQ/tracecat).**
+> Default branch is `deploy/mytracecat` — the integration branch carrying our
+> extra patches on top of upstream:
+>
+> - `feat/basepath` — serve Tracecat under a sub-path (`/tracecat`).
+> - `feat/ai-action-system-prompt-overrides` — per-source `system_prompt_replace` /
+>   `system_prompt_append` on custom providers, with cascade resolution.
+> - `feat/ai-action-allowed-tools-control` — per-source Claude SDK allowed-tools
+>   list on custom providers.
+> - `feat/workflow-upsert` — `POST /workflows/{wf_id}/upsert` for idempotent
+>   YAML deploys at a stable workflow id (preserves webhook URL secret and
+>   webhook API key across redeploys).
+> - `feat/external-directory` — `GET /workspaces/{ws}/directory` +
+>   `POST .../webhook/regenerate-key`: service-key authenticated directory API
+>   for internal backends (folders + workflows + webhooks in one tree response).
+>
+> See [`FORK_MAINTENANCE.md`](FORK_MAINTENANCE.md) for the full branch layout,
+> rebase procedure, conflict-prone files, and per-endpoint reference.
+>
+> The upstream README follows.
+
+---
+
 <div align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="img/banner-dark.svg">
