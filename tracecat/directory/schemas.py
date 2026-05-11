@@ -26,11 +26,17 @@ class DirectoryWebhookKey(BaseModel):
 
 
 class DirectoryWorkflowNode(BaseModel):
-    """A workflow entry in the directory tree."""
+    """A workflow entry in the directory tree.
+
+    The `id` field is the unique node identifier (= short wf_id). This name
+    matches the default `getItemId` of virtual-tree-style renderers
+    (`item.id || item.nodeId`).
+    """
 
     # Tree node fields
-    _id: str = Field(
-        ..., description="Unique identifier for the tree node (= short wf_id)"
+    id: str = Field(
+        ...,
+        description="Unique identifier for the tree node (= short wf_id)",
     )
     type: Literal["workflow"] = "workflow"
     children: list = Field(
@@ -55,9 +61,13 @@ class DirectoryWorkflowNode(BaseModel):
 
 
 class DirectoryFolderNode(BaseModel):
-    """A folder entry in the directory tree."""
+    """A folder entry in the directory tree.
 
-    _id: str = Field(
+    The `id` field is the unique node identifier (prefixed `folder:` to
+    avoid colliding with workflow short ids).
+    """
+
+    id: str = Field(
         ...,
         description=(
             "Unique identifier for the tree node "

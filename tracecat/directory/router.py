@@ -99,7 +99,7 @@ async def get_directory(
     folder_nodes_by_path: dict[str, DirectoryFolderNode] = {}
     for f in folders:
         folder_nodes_by_path[f.path] = DirectoryFolderNode(
-            _id=f"folder:{f.id}",
+            id=f"folder:{f.id}",
             name=f.name,
             path=f.path,
             children=[],
@@ -136,7 +136,7 @@ async def get_directory(
                 )
 
         node = DirectoryWorkflowNode(
-            _id=wf_id_short,
+            id=wf_id_short,
             wf_id=wf_id_short,
             alias=wf.alias,
             title=wf.title,
