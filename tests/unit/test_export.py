@@ -15,6 +15,7 @@ from tracecat.workflow.case_triggers.schemas import CaseTriggerConfig
 from tracecat.workflow.management.management import WorkflowsManagementService
 from tracecat.workflow.management.schemas import (
     ExternalWorkflowDefinition,
+    ExternalWorkflowTag,
     WorkflowLayout,
     WorkflowLayoutActionPosition,
     WorkflowLayoutPosition,
@@ -222,6 +223,79 @@ def test_external_workflow_definition_includes_layout():
     assert external.layout.actions == [
         WorkflowLayoutActionPosition(ref="entrypoint_1", x=100.0, y=200.0)
     ]
+
+
+def _build_export_namespace(*, alias: str | None, tags: list[SimpleNamespace]):
+    """Build a SimpleNamespace mimicking a WorkflowDefinition + Workflow for tests."""
+    return cast(
+        WorkflowDefinition,
+        SimpleNamespace(
+            workspace_id=uuid.uuid4(),
+            workflow_id=WorkflowUUID.new_uuid4(),
+            created_at=datetime(2024, 1, 1, tzinfo=UTC),
+            updated_at=datetime(2024, 1, 1, tzinfo=UTC),
+            version=1,
+            content={
+                "title": "alias_tags_export",
+                "description": "Export should include alias and tags",
+                "entrypoint": {"expects": {}, "ref": None},
+                "actions": [
+                    {
+                        "ref": "entrypoint_1",
+                        "action": "core.transform.reshape",
+                        "args": {"value": "ENTRYPOINT_1"},
+                    }
+                ],
+            },
+            workflow=SimpleNamespace(
+                alias=alias,
+                tags=tags,
+                trigger_position_x=0.0,
+                trigger_position_y=0.0,
+                viewport_x=0.0,
+                viewport_y=0.0,
+                viewport_zoom=1.0,
+                actions=[],
+                case_trigger=SimpleNamespace(
+                    status="offline",
+                    event_types=[],
+                    tag_filters=[],
+                ),
+            ),
+        ),
+    )
+
+
+def test_external_workflow_definition_includes_alias():
+    external = ExternalWorkflowDefinition.from_database(
+        _build_export_namespace(alias="my-workflow-alias", tags=[])
+    )
+    assert external.alias == "my-workflow-alias"
+    assert external.tags == []
+
+
+def test_external_workflow_definition_includes_tags():
+    tags = [
+        SimpleNamespace(ref="production", name="Production", color="#00ff00"),
+        SimpleNamespace(ref="security", name="Security", color=None),
+    ]
+    external = ExternalWorkflowDefinition.from_database(
+        _build_export_namespace(alias=None, tags=tags)
+    )
+    assert external.alias is None
+    assert external.tags == [
+        ExternalWorkflowTag(ref="production", name="Production", color="#00ff00"),
+        ExternalWorkflowTag(ref="security", name="Security", color=None),
+    ]
+
+
+def test_external_workflow_definition_omits_missing_alias_and_tags():
+    """A workflow with no alias and no tags should export with alias=None and tags=[]."""
+    external = ExternalWorkflowDefinition.from_database(
+        _build_export_namespace(alias=None, tags=[])
+    )
+    assert external.alias is None
+    assert external.tags == []
 
 
 @pytest.mark.anyio

@@ -160,6 +160,15 @@ Exported workflows can be imported via the "Create new" button in the `/workflow
 
 ![Workflow import](/img/automations/workflows/workflow-import.png)
 
+### Exported YAML fields
+
+The exported YAML is portable across workspaces. In addition to the workflow definition (`definition`) and visual layout (`layout`), it includes:
+
+- **`alias`** — the workflow alias (human-readable identifier used by `core.workflow.execute` and external tooling). `null` if no alias was set.
+- **`tags`** — list of tags attached to the workflow, embedded as full `{ref, name, color}` triplets so the export can be re-imported into a workspace that does not yet know these tags.
+
+The `workflow_id` and `workspace_id` fields are also included so the export records the source of truth, but you can safely strip or replace them when moving the YAML between environments.
+
 ## Cancel / terminate / reset runs
 
 <Danger>

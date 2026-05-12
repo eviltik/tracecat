@@ -561,6 +561,7 @@ class WorkflowsManagementService(BaseWorkspaceService):
                 selectinload(Workflow.webhook).options(selectinload(Webhook.api_key)),
                 selectinload(Workflow.case_trigger),
                 selectinload(Workflow.schedules),
+                selectinload(Workflow.tags),
             )
         )
         if for_update:
