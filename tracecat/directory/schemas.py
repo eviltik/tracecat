@@ -25,6 +25,14 @@ class DirectoryWebhookKey(BaseModel):
     is_active: bool = True
 
 
+class DirectoryTag(BaseModel):
+    """A workflow tag exposed in the directory tree."""
+
+    ref: str = Field(..., description="Slug-like identifier, stable across renames")
+    name: str = Field(..., description="Human-readable label")
+    color: str | None = None
+
+
 class DirectoryWorkflowNode(BaseModel):
     """A workflow entry in the directory tree.
 
@@ -51,6 +59,10 @@ class DirectoryWorkflowNode(BaseModel):
     description: str | None = None
     version: int | None = None
     status: str
+    tags: list[DirectoryTag] = Field(
+        default_factory=list,
+        description="Workflow tags (organization/filtering metadata)",
+    )
 
     # Webhook fields (URL contains a secret derived from webhook.id — treat
     # as sensitive)

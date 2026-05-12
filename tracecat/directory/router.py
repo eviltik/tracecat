@@ -38,6 +38,7 @@ from tracecat.db.models import Webhook, WebhookApiKey, Workflow, WorkflowFolder
 from tracecat.directory.schemas import (
     DirectoryFolderNode,
     DirectoryResponse,
+    DirectoryTag,
     DirectoryWebhookKey,
     DirectoryWorkflowNode,
     RegeneratedWebhookKey,
@@ -84,12 +85,13 @@ async def get_directory(
     folder_res = await session.execute(folder_stmt)
     folders = folder_res.scalars().all()
 
-    # 2. Fetch all workflows for this workspace, with their webhook + api_key
+    # 2. Fetch all workflows for this workspace, with their webhook + api_key + tags
     workflow_stmt = (
         select(Workflow)
         .where(Workflow.workspace_id == workspace_id)
         .options(
             selectinload(Workflow.webhook).selectinload(Webhook.api_key),
+            selectinload(Workflow.tags),
         )
     )
     workflow_res = await session.execute(workflow_stmt)
@@ -135,6 +137,11 @@ async def get_directory(
                     is_active=api_key.revoked_at is None,
                 )
 
+        tag_nodes = [
+            DirectoryTag(ref=t.ref, name=t.name, color=t.color)
+            for t in (wf.tags or [])
+        ]
+
         node = DirectoryWorkflowNode(
             id=wf_id_short,
             wf_id=wf_id_short,
@@ -143,6 +150,7 @@ async def get_directory(
             description=wf.description,
             version=wf.version,
             status=wf.status,
+            tags=tag_nodes,
             webhook_url=webhook_url,
             webhook_status=webhook_status,
             webhook_methods=webhook_methods,
