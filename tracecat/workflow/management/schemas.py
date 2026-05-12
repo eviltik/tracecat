@@ -189,6 +189,20 @@ class GetErrorHandlerWorkflowIDActivityInputs(BaseModel):
 WorkflowExportFormat = Literal["json", "yaml"]
 
 
+class ExternalWorkflowTag(BaseModel):
+    """A workflow tag in the portable interchange format.
+
+    Only contains the fields that make sense across workspaces: workspace-scoped
+    ids (`TagRead.id`) are deliberately omitted so the YAML can be moved between
+    workspaces or tenants without referencing local primary keys. At import
+    time, tags are resolved by `ref` (slug-like, stable identifier).
+    """
+
+    ref: str = Field(description="Slug-like identifier, stable across renames")
+    name: str = Field(min_length=1, max_length=50)
+    color: str | None = Field(default=None, description="Hex color code")
+
+
 class ExternalWorkflowDefinition(BaseModel):
     """External interchange format for workflow definitions.
 
@@ -205,6 +219,22 @@ class ExternalWorkflowDefinition(BaseModel):
     workflow_id: WorkflowUUID | None = Field(
         default=None,
         description="Workflow ID. If not provided, a new workflow ID will be created.",
+    )
+    alias: str | None = Field(
+        default=None,
+        description=(
+            "Workflow alias (human-readable identifier used to invoke the "
+            "workflow from other workflows via core.workflow.execute, and from "
+            "external tooling). Optional but recommended."
+        ),
+    )
+    tags: list[ExternalWorkflowTag] = Field(
+        default_factory=list,
+        description=(
+            "Workflow tags. Embedded as full {ref, name, color} so the export "
+            "can be re-imported into a workspace that does not yet know these "
+            "tags (the importer is expected to create missing tags by `ref`)."
+        ),
     )
     created_at: datetime | None = Field(
         default=None,
@@ -239,9 +269,18 @@ class ExternalWorkflowDefinition(BaseModel):
                         "tag_filters": workflow_case_trigger.tag_filters,
                     }
                 )
+        alias = defn.workflow.alias if defn.workflow else None
+        tags: list[ExternalWorkflowTag] = []
+        if defn.workflow and defn.workflow.tags:
+            tags = [
+                ExternalWorkflowTag(ref=t.ref, name=t.name, color=t.color)
+                for t in defn.workflow.tags
+            ]
         return ExternalWorkflowDefinition(
             workspace_id=defn.workspace_id,
             workflow_id=WorkflowUUID.new(defn.workflow_id),
+            alias=alias,
+            tags=tags,
             created_at=defn.created_at,
             updated_at=defn.updated_at,
             version=defn.version,

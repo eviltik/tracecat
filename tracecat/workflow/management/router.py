@@ -72,6 +72,7 @@ from tracecat.workflow.management.folders.service import WorkflowFolderService
 from tracecat.workflow.management.management import WorkflowsManagementService
 from tracecat.workflow.management.schemas import (
     ExternalWorkflowDefinition,
+    ExternalWorkflowTag,
     WorkflowCommitResponse,
     WorkflowCreate,
     WorkflowDefinitionRead,
@@ -660,9 +661,15 @@ async def export_workflow(
                 }
             )
 
+        wf_tags = [
+            ExternalWorkflowTag(ref=t.ref, name=t.name, color=t.color)
+            for t in (workflow.tags or [])
+        ]
         external_defn = ExternalWorkflowDefinition(
             workspace_id=workflow.workspace_id,
             workflow_id=WorkflowUUID.new(workflow.id),
+            alias=workflow.alias,
+            tags=wf_tags,
             definition=dsl,
             layout=WorkflowLayout.from_workflow(workflow),
             case_trigger=case_trigger,
