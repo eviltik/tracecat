@@ -225,7 +225,12 @@ def test_external_workflow_definition_includes_layout():
     ]
 
 
-def _build_export_namespace(*, alias: str | None, tags: list[SimpleNamespace]):
+def _build_export_namespace(
+    *,
+    alias: str | None,
+    tags: list[SimpleNamespace],
+    folder: SimpleNamespace | None = None,
+):
     """Build a SimpleNamespace mimicking a WorkflowDefinition + Workflow for tests."""
     return cast(
         WorkflowDefinition,
@@ -250,6 +255,7 @@ def _build_export_namespace(*, alias: str | None, tags: list[SimpleNamespace]):
             workflow=SimpleNamespace(
                 alias=alias,
                 tags=tags,
+                folder=folder,
                 trigger_position_x=0.0,
                 trigger_position_y=0.0,
                 viewport_x=0.0,
@@ -296,6 +302,25 @@ def test_external_workflow_definition_omits_missing_alias_and_tags():
     )
     assert external.alias is None
     assert external.tags == []
+    # folder_path is also None for a workflow at the workspace root.
+    assert external.folder_path is None
+
+
+def test_external_workflow_definition_includes_folder_path():
+    """A workflow placed in a folder should export its folder path."""
+    folder = SimpleNamespace(path="/security/detections/")
+    external = ExternalWorkflowDefinition.from_database(
+        _build_export_namespace(alias=None, tags=[], folder=folder)
+    )
+    assert external.folder_path == "/security/detections/"
+
+
+def test_external_workflow_definition_omits_missing_folder_path():
+    """A workflow at the workspace root should export folder_path=None."""
+    external = ExternalWorkflowDefinition.from_database(
+        _build_export_namespace(alias=None, tags=[], folder=None)
+    )
+    assert external.folder_path is None
 
 
 @pytest.mark.anyio

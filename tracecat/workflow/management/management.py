@@ -562,6 +562,7 @@ class WorkflowsManagementService(BaseWorkspaceService):
                 selectinload(Workflow.case_trigger),
                 selectinload(Workflow.schedules),
                 selectinload(Workflow.tags),
+                selectinload(Workflow.folder),
             )
         )
         if for_update:
