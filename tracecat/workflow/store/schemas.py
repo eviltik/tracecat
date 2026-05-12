@@ -115,6 +115,17 @@ class RemoteWorkflowTag(BaseModel):
     name: str
     """The name of the tag."""
 
+    ref: str | None = None
+    """Slug-like stable identifier of the tag. When present, the importer
+    matches existing tags by `ref` (so renaming a tag does not break the
+    association). When absent, falls back to matching by `name`."""
+
+    color: str | None = None
+    """Hex color code (e.g. '#00ab26'). When present, the importer uses
+    this color when creating a new tag in the workspace. When absent, the
+    importer keeps the existing tag color (for an existing tag) or generates
+    a random one (for a new tag)."""
+
 
 Status = Literal["online", "offline"]
 

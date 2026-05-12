@@ -537,33 +537,47 @@ class WorkflowImportService(BaseWorkspaceService):
             return
 
         for tag_data in remote_tags:
-            tag_name = tag_data.name
-
-            # Find or create tag in workspace
-            tag = await self._find_or_create_tag(tag_name)
+            # Find or create tag in workspace, respecting the remote `ref`
+            # (matching identity) and `color` (visual) when provided.
+            tag = await self._find_or_create_tag(tag_data)
 
             # Create workflow-tag association
             workflow_tag = WorkflowTagLink(workflow_id=workflow.id, tag_id=tag.id)
             self.session.add(workflow_tag)
 
-    async def _find_or_create_tag(self, tag_name: str) -> WorkflowTag:
-        """Find existing tag or create new one in workspace."""
+    async def _find_or_create_tag(self, tag_data: RemoteWorkflowTag) -> WorkflowTag:
+        """Find existing tag or create new one in workspace.
+
+        Matching strategy:
+          - If `tag_data.ref` is provided, match by ref (stable identity).
+          - Otherwise fall back to matching by name.
+
+        On create, the tag uses `tag_data.color` if provided, else a random
+        color. On match, the existing tag's color is preserved (not overwritten)
+        — the workflow YAML is the source of truth for the association, not
+        for the global tag attributes (renaming/recoloring is a workspace-level
+        operation done outside this code path).
+        """
         if not self.workspace_id:
             raise TracecatAuthorizationError("Workspace ID is required")
 
         stmt = select(WorkflowTag).where(
             WorkflowTag.workspace_id == self.workspace_id,
-            WorkflowTag.name == tag_name,
         )
+        if tag_data.ref:
+            stmt = stmt.where(WorkflowTag.ref == tag_data.ref)
+        else:
+            stmt = stmt.where(WorkflowTag.name == tag_data.name)
+
         result = await self.session.execute(stmt)
         tag = result.scalars().first()
 
         if not tag:
             tag = WorkflowTag(
                 id=uuid.uuid4(),
-                name=tag_name,
-                ref=tag_name.lower().replace(" ", "-"),
-                color=self._generate_tag_color(),
+                name=tag_data.name,
+                ref=tag_data.ref or tag_data.name.lower().replace(" ", "-"),
+                color=tag_data.color or self._generate_tag_color(),
                 workspace_id=self.workspace_id,
             )
             self.session.add(tag)
