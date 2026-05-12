@@ -228,6 +228,16 @@ class ExternalWorkflowDefinition(BaseModel):
             "external tooling). Optional but recommended."
         ),
     )
+    folder_path: str | None = Field(
+        default=None,
+        description=(
+            "Materialized path of the workflow's folder, e.g. '/O365/tests/'. "
+            "`None` means the workflow lives at the workspace root. Recording "
+            "this in the export lets the importer re-place the workflow into "
+            "the same folder (and create the folder hierarchy if it is missing "
+            "in the target workspace)."
+        ),
+    )
     tags: list[ExternalWorkflowTag] = Field(
         default_factory=list,
         description=(
@@ -270,6 +280,11 @@ class ExternalWorkflowDefinition(BaseModel):
                     }
                 )
         alias = defn.workflow.alias if defn.workflow else None
+        folder_path = (
+            defn.workflow.folder.path
+            if defn.workflow and defn.workflow.folder
+            else None
+        )
         tags: list[ExternalWorkflowTag] = []
         if defn.workflow and defn.workflow.tags:
             tags = [
@@ -280,6 +295,7 @@ class ExternalWorkflowDefinition(BaseModel):
             workspace_id=defn.workspace_id,
             workflow_id=WorkflowUUID.new(defn.workflow_id),
             alias=alias,
+            folder_path=folder_path,
             tags=tags,
             created_at=defn.created_at,
             updated_at=defn.updated_at,

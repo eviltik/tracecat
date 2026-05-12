@@ -665,10 +665,12 @@ async def export_workflow(
             ExternalWorkflowTag(ref=t.ref, name=t.name, color=t.color)
             for t in (workflow.tags or [])
         ]
+        wf_folder_path = workflow.folder.path if workflow.folder else None
         external_defn = ExternalWorkflowDefinition(
             workspace_id=workflow.workspace_id,
             workflow_id=WorkflowUUID.new(workflow.id),
             alias=workflow.alias,
+            folder_path=wf_folder_path,
             tags=wf_tags,
             definition=dsl,
             layout=WorkflowLayout.from_workflow(workflow),

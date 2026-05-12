@@ -38,6 +38,7 @@ class WorkflowDefinitionsService(BaseWorkspaceService):
                     selectinload(Workflow.case_trigger),
                     selectinload(Workflow.actions),
                     selectinload(Workflow.tags),
+                    selectinload(Workflow.folder),
                 )
             )
         )
