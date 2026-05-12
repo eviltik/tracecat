@@ -518,15 +518,32 @@ class WorkflowImportService(BaseWorkspaceService):
     async def _update_tags(
         self, workflow: Workflow, remote_tags: list[RemoteWorkflowTag] | None = None
     ) -> None:
-        """Update workflow tags - replace existing with new ones."""
-        # Delete existing workflow-tag associations
-        await self.session.refresh(workflow, ["tags"])
-        for workflow_tag in workflow.tags:
-            await self.session.delete(workflow_tag)
-        await self.session.flush()
+        """Merge workflow tags — add tags from the YAML, never remove existing ones.
 
-        # Create new tag associations
-        await self._create_tags(workflow, remote_tags)
+        Rationale: a workflow stored in a git repo (the YAML) might not list
+        every tag a user has manually added in the Tracecat UI. Replacing on
+        upsert would silently wipe those manual tags. We add what the YAML
+        provides and leave the rest untouched. Removing a tag is an explicit
+        workspace-level operation done outside this code path.
+        """
+        if not remote_tags:
+            # YAML carries no tags → nothing to merge, leave existing tags alone.
+            return
+
+        # Refresh to ensure workflow.tags reflects the current DB state.
+        await self.session.refresh(workflow, ["tags"])
+        existing_refs = {t.ref for t in workflow.tags}
+
+        for tag_data in remote_tags:
+            # Resolve / create the tag in the workspace (matches by ref).
+            tag = await self._find_or_create_tag(tag_data)
+            # Skip if the workflow is already associated with this tag.
+            if tag.ref in existing_refs:
+                continue
+            self.session.add(
+                WorkflowTagLink(workflow_id=workflow.id, tag_id=tag.id)
+            )
+            existing_refs.add(tag.ref)
         await self.session.flush()
 
     async def _create_tags(
