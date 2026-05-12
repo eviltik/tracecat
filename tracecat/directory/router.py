@@ -268,6 +268,16 @@ async def regenerate_webhook_api_key(
         api_key.created_at = now
         api_key.updated_at = now
     session.add(api_key)
+
+    # Activate the webhook as a side-effect of generating an API key.
+    # Rationale: generating a key implies intent to expose the workflow
+    # externally. Keeping the webhook offline after a regen leaves the
+    # workflow non-callable, which defeats the purpose of the key.
+    if webhook.status != "online":
+        webhook.status = "online"
+        webhook.updated_at = now
+        session.add(webhook)
+
     await session.commit()
 
     return RegeneratedWebhookKey(
