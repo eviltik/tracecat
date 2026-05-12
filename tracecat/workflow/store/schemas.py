@@ -14,6 +14,7 @@ from tracecat.cases.enums import CaseEventType
 from tracecat.dsl.common import DSLInput
 from tracecat.identifiers.workflow import WorkflowID, WorkflowIDShort
 from tracecat.store import Source
+from tracecat.workflow.management.schemas import WorkflowLayout
 
 # TODO(deps): This is only supported starting pydantic 2.11+
 WorkflowSource = Source[WorkflowID]
@@ -213,6 +214,11 @@ class RemoteWorkflowDefinition(BaseModel):
 
     case_trigger: RemoteCaseTrigger | None = None
     """Case trigger configuration for the workflow."""
+
+    layout: WorkflowLayout | None = None
+    """Visual layout (trigger / viewport / action positions). Optional — when
+    present at import time, the importer applies the positions so the round-trip
+    export → upsert → re-export preserves the visual layout."""
 
     definition: DSLInput
 

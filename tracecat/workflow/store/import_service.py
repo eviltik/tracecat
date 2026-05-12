@@ -23,6 +23,7 @@ from tracecat.workflow.case_triggers.service import CaseTriggersService
 from tracecat.workflow.management.definitions import WorkflowDefinitionsService
 from tracecat.workflow.management.folders.service import WorkflowFolderService
 from tracecat.workflow.management.management import WorkflowsManagementService
+from tracecat.workflow.management.schemas import WorkflowLayout
 from tracecat.workflow.schedules.schemas import ScheduleCreate
 from tracecat.workflow.schedules.service import WorkflowSchedulesService
 from tracecat.workflow.store.schemas import (
@@ -318,7 +319,12 @@ class WorkflowImportService(BaseWorkspaceService):
         actions = await self.wf_mgmt.create_actions_from_dsl(dsl, existing_workflow.id)
         existing_workflow.actions = actions
 
-        # 5. Update folder if specified
+        # 5. Apply layout if provided (trigger / viewport / action positions).
+        # If absent, the existing workflow keeps its current visual layout.
+        if remote_workflow.layout is not None:
+            self._apply_layout(existing_workflow, remote_workflow.layout)
+
+        # 6. Update folder if specified
         if remote_workflow.folder_path:
             folder_id = await self._ensure_folder_exists(remote_workflow.folder_path)
             existing_workflow.folder_id = folder_id
@@ -326,11 +332,37 @@ class WorkflowImportService(BaseWorkspaceService):
             # If folder_path is explicitly None, remove from folder
             existing_workflow.folder_id = None
 
-        # 6. Update related entities
+        # 7. Update related entities
         await self._update_schedules(existing_workflow, remote_workflow.schedules)
         await self._update_webhook(existing_workflow.webhook, remote_workflow.webhook)
         await self._update_case_trigger(existing_workflow, remote_workflow.case_trigger)
         await self._update_tags(existing_workflow, remote_workflow.tags)
+
+    def _apply_layout(self, workflow: Workflow, layout: WorkflowLayout) -> None:
+        """Apply a `WorkflowLayout` to an existing workflow + its actions.
+
+        Mutates the workflow row (trigger and viewport positions) and the
+        positions of actions that match by `ref`. Actions in the layout that
+        have no matching action in the workflow are silently ignored (the
+        action might have been removed from the DSL between exports).
+        """
+        trigger_position, viewport, action_positions = layout.extract_positions()
+
+        if trigger_position is not None:
+            workflow.trigger_position_x = trigger_position[0]
+            workflow.trigger_position_y = trigger_position[1]
+
+        if viewport is not None:
+            workflow.viewport_x = viewport[0]
+            workflow.viewport_y = viewport[1]
+            workflow.viewport_zoom = viewport[2]
+
+        if action_positions:
+            for action in workflow.actions or []:
+                pos = action_positions.get(action.ref)
+                if pos is not None:
+                    action.position_x = pos[0]
+                    action.position_y = pos[1]
 
     async def _create_new_workflow(self, remote_defn: RemoteWorkflowDefinition) -> None:
         """Create a new workflow entity with all related entities."""
@@ -342,10 +374,26 @@ class WorkflowImportService(BaseWorkspaceService):
         if remote_defn.folder_path:
             folder_id = await self._ensure_folder_exists(remote_defn.folder_path)
 
+        # Extract layout positions if present in the remote definition so the
+        # visual layout is preserved on create.
+        trigger_position = None
+        viewport = None
+        action_positions = None
+        if remote_defn.layout is not None:
+            trigger_position, viewport, action_positions = (
+                remote_defn.layout.extract_positions()
+            )
+
         # Create workflow manually to avoid transaction conflicts
         # Similar to _create_db_workflow_from_dsl but without committing
         workflow = await self.wf_mgmt.create_db_workflow_from_dsl(
-            dsl, workflow_id=wf_id, commit=False, workflow_alias=remote_defn.alias
+            dsl,
+            workflow_id=wf_id,
+            commit=False,
+            workflow_alias=remote_defn.alias,
+            trigger_position=trigger_position,
+            viewport=viewport,
+            action_positions=action_positions,
         )
 
         # Set folder if specified
