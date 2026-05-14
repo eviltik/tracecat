@@ -16,6 +16,7 @@ upstream release, see [`FORK_SYNC.md`](FORK_SYNC.md).
 | [`feat/ai-action-allowed-tools-control`](https://github.com/eviltik/tracecat/tree/feat/ai-action-allowed-tools-control) | Per-source Claude SDK tools allowlist. | [#3](https://github.com/eviltik/tracecat/issues/3) | Not proposed yet — could be |
 | [`feat/workflow-upsert`](https://github.com/eviltik/tracecat/tree/feat/workflow-upsert) | `POST /workflows/{wf_id}/upsert` — idempotent YAML deploy, preserves webhook URL & API key. | [#4](https://github.com/eviltik/tracecat/issues/4) | Not proposed yet — good candidate |
 | [`feat/external-directory`](https://github.com/eviltik/tracecat/tree/feat/external-directory) | `GET /workspaces/{ws}/directory` — service-key authenticated directory API for internal backends. | [#5](https://github.com/eviltik/tracecat/issues/5) | Not proposed — tension with Tracecat Service Accounts (paid feature) |
+| [`feat/directory-meta`](https://github.com/eviltik/tracecat/tree/feat/directory-meta) | Expose the workflow `meta` action (`args.value`) as a `meta` dict on each directory node — opaque metadata pass-through. | [#6](https://github.com/eviltik/tracecat/issues/6) | Not proposed — extension of `feat/external-directory` (#5) |
 | `deploy/mytracecat` | **Default branch.** Merges all the above on top of `origin/main`. Docker images build from this. | — | — |
 
 Open the corresponding issue for the goal, design, why-OSS-relevant

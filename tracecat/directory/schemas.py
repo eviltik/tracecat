@@ -14,6 +14,33 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
+def extract_workflow_meta(definitions: list) -> dict:
+    """Extract the declarative metadata bag from a workflow's definitions.
+
+    Returns the `args.value` dict of the `meta` action (a
+    `core.transform.reshape` with `ref == "meta"`) from the most recent
+    committed definition. This is an opaque pass-through: whatever a
+    workflow declares in its `meta` action — label, version, custom
+    fields — is surfaced as-is.
+
+    Pure function (no DB access) so it can be unit-tested in isolation.
+    Each item of `definitions` only needs `.version` (int, for picking
+    the latest) and `.content` (dict, the DSL).
+
+    Returns an empty dict if there are no definitions, no `meta` action,
+    or the action has no dict `args.value`.
+    """
+    if not definitions:
+        return {}
+    latest = max(definitions, key=lambda d: d.version)
+    actions = (getattr(latest, "content", None) or {}).get("actions") or []
+    for act in actions:
+        if isinstance(act, dict) and act.get("ref") == "meta":
+            value = (act.get("args") or {}).get("value")
+            return value if isinstance(value, dict) else {}
+    return {}
+
+
 class DirectoryWebhookKey(BaseModel):
     """Lightweight webhook API key info (preview only — raw key is never
     retrievable after creation; use the regenerate endpoint to rotate)."""
