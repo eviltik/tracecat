@@ -63,6 +63,16 @@ class DirectoryWorkflowNode(BaseModel):
         default_factory=list,
         description="Workflow tags (organization/filtering metadata)",
     )
+    meta: dict = Field(
+        default_factory=dict,
+        description=(
+            "Declarative metadata bag — the `args.value` of the workflow's "
+            "`meta` action (if any). Opaque pass-through: whatever a workflow "
+            "puts in its `meta` action (label, version, custom fields...) is "
+            "surfaced here, so consumers can read workflow metadata without "
+            "fetching the full definition. Empty dict if no `meta` action."
+        ),
+    )
 
     # Webhook fields (URL contains a secret derived from webhook.id — treat
     # as sensitive)

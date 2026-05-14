@@ -34,7 +34,13 @@ from sqlalchemy.orm import selectinload
 from tracecat.auth.api_keys import generate_api_key
 from tracecat.auth.dependencies import WorkspaceServiceRole
 from tracecat.db.dependencies import AsyncDBSession
-from tracecat.db.models import Webhook, WebhookApiKey, Workflow, WorkflowFolder
+from tracecat.db.models import (
+    Webhook,
+    WebhookApiKey,
+    Workflow,
+    WorkflowDefinition,
+    WorkflowFolder,
+)
 from tracecat.directory.schemas import (
     DirectoryFolderNode,
     DirectoryResponse,
@@ -92,6 +98,7 @@ async def get_directory(
         .options(
             selectinload(Workflow.webhook).selectinload(Webhook.api_key),
             selectinload(Workflow.tags),
+            selectinload(Workflow.definitions),
         )
     )
     workflow_res = await session.execute(workflow_stmt)
@@ -142,6 +149,22 @@ async def get_directory(
             for t in (wf.tags or [])
         ]
 
+        # Declarative metadata bag: the `args.value` of the workflow's `meta`
+        # action, taken from the latest committed definition. Opaque
+        # pass-through — whatever the workflow declares in its `meta` action
+        # (label, version, custom fields...) is surfaced as-is, so consumers
+        # read workflow metadata without fetching the full definition.
+        meta: dict = {}
+        if wf.definitions:
+            latest_def = max(wf.definitions, key=lambda d: d.version)
+            actions = (latest_def.content or {}).get("actions") or []
+            for act in actions:
+                if isinstance(act, dict) and act.get("ref") == "meta":
+                    value = (act.get("args") or {}).get("value")
+                    if isinstance(value, dict):
+                        meta = value
+                    break
+
         node = DirectoryWorkflowNode(
             id=wf_id_short,
             wf_id=wf_id_short,
@@ -151,6 +174,7 @@ async def get_directory(
             version=wf.version,
             status=wf.status,
             tags=tag_nodes,
+            meta=meta,
             webhook_url=webhook_url,
             webhook_status=webhook_status,
             webhook_methods=webhook_methods,
