@@ -48,6 +48,7 @@ from tracecat.directory.schemas import (
     DirectoryWebhookKey,
     DirectoryWorkflowNode,
     RegeneratedWebhookKey,
+    extract_workflow_meta,
 )
 from tracecat.identifiers.workflow import AnyWorkflowIDPath, WorkflowUUID
 from tracecat.logger import logger
@@ -149,21 +150,10 @@ async def get_directory(
             for t in (wf.tags or [])
         ]
 
-        # Declarative metadata bag: the `args.value` of the workflow's `meta`
-        # action, taken from the latest committed definition. Opaque
-        # pass-through — whatever the workflow declares in its `meta` action
-        # (label, version, custom fields...) is surfaced as-is, so consumers
-        # read workflow metadata without fetching the full definition.
-        meta: dict = {}
-        if wf.definitions:
-            latest_def = max(wf.definitions, key=lambda d: d.version)
-            actions = (latest_def.content or {}).get("actions") or []
-            for act in actions:
-                if isinstance(act, dict) and act.get("ref") == "meta":
-                    value = (act.get("args") or {}).get("value")
-                    if isinstance(value, dict):
-                        meta = value
-                    break
+        # Declarative metadata bag: the `args.value` of the workflow's
+        # `meta` action, taken from the latest committed definition.
+        # Opaque pass-through (see extract_workflow_meta docstring).
+        meta = extract_workflow_meta(wf.definitions)
 
         node = DirectoryWorkflowNode(
             id=wf_id_short,
